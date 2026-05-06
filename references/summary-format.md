@@ -56,6 +56,7 @@ Wenn nur ein Transcript vorhanden ist, erstelle eine Meeting-Summary in dieser R
 ## Priorität der Felder
 
 ### Pflichtfelder für manuelle Summary
+
 - `gist`
 - `short_summary`
 - `overview`
@@ -63,10 +64,12 @@ Wenn nur ein Transcript vorhanden ist, erstelle eine Meeting-Summary in dieser R
 - `notes`
 
 ### Stark empfohlen
+
 - `action_items`
 - `keywords`
 
 ### Optional nur bei belastbarer Grundlage
+
 - `shorthand_bullet`
 - `outline`
 - `short_overview`
@@ -86,7 +89,7 @@ Wenn nur ein Transcript vorhanden ist, erstelle eine Meeting-Summary in dieser R
 
 ## Beobachtete Muster in den lokal gespiegelten Summary-Dateien
 
-Die vorhandenen lokalen Summary-Dateien in `boku-martin` zeigen zusätzlich diese nützlichen Muster:
+Die vorhandenen lokalen Summary-Dateien im Agent-Workspace zeigen zusätzlich diese nützlichen Muster:
 
 - oberhalb der eigentlichen Summary steht ein kurzer Block `Kurzüberblick`
   - typischerweise mit Datum, Dauer, Channel, Organizer, Teilnehmern und Transcript-URL
@@ -199,6 +202,7 @@ Die lokale Summary-Datei unter `memory/references/meetings/...summary.md` soll s
 ## Regel für transcript-only Fälle
 
 Wenn nur ein Transcript vorhanden ist und keine Fireflies-Summary mitgeliefert wird:
+
 - immer eine eigene Meeting-Summary erzeugen
 - die Summary nach obigem Schema schreiben
 - bevorzugt die lokal beobachtete Abschnittsfolge verwenden: `Kurzüberblick` -> `Summary` -> `Executive Summary` -> `Key Points` -> `Decisions` -> `Action Items` -> `Open Questions` -> `Participants and Speakers` -> `Analytics Snapshot` -> `Related Systems` -> `Source Notes`
@@ -212,14 +216,14 @@ Wenn nur ein Transcript vorhanden ist und keine Fireflies-Summary mitgeliefert w
 - Beobachtete API-Antwort aus vorhandenem Fireflies-Meeting
   - Transcript ID: `01KPQFT3J7DKHMXKEMRNYD2MZE`
   - Gelesen: 2026-04-21
-- Beobachtete lokale Summary-Dateien in `boku-martin`
-  - `2026-04-21-core-competence-ai-part-1.summary.md`
-  - `2026-04-21-core-competence-ai-part-2.summary.md`
-  - `2026-04-09-github-copilot-integration-and-challenges-meeting.summary.md`
+- Beobachtete lokale Summary-Dateien im Agent-Workspace
+  - `2026-04-21-example-meeting-part-1.summary.md`
+  - `2026-04-21-example-meeting-part-2.summary.md`
+  - `2026-04-09-example-integration-meeting.summary.md`
   - Gelesen: 2026-04-21
 - Summary Schema
-  - URL: https://docs.fireflies.ai/schema/summary
+  - URL: <https://docs.fireflies.ai/schema/summary>
   - Gelesen: 2026-04-21
 - Summary Section Schema
-  - URL: https://docs.fireflies.ai/schema/summary-section
+  - URL: <https://docs.fireflies.ai/schema/summary-section>
   - Gelesen: 2026-04-21

@@ -44,6 +44,7 @@ Wenn du Fireflies noch nicht gut genug kennst oder wenn sich das Thema nach aktu
    - Fireflies arbeitet laut Doku mit Bearer API Key.
    - Keine Secrets raten oder erfinden.
    - Lokale Secret-Konvention: `~/.openclaw/secrets.json` unter `integrations.fireflies.accounts.<email>.apiKey`.
+  - `secrets.json` darf niemals versioniert oder in PRs enthalten sein.
    - Beim Zugriff auf Accounts mit Sonderzeichen in der Mailadresse immer String-Key-Notation verwenden, nicht Dot-Notation.
   - Account-Zugriff erfolgt über `integrations.fireflies.accounts["<email>"].apiKey`.
    - Wenn Credentials fehlen, nur Vorbereitung, Schema, Beispiele und Integrationsplan liefern.
@@ -211,7 +212,7 @@ Aktuelle Skripte:
   - Einsatz: kurze Capability-Checks, bevor neue Metadaten dauerhaft in den Sync übernommen werden
 - `relocate-local-meeting.mjs`
   - hängt ein bereits lokal gespiegeltes Meeting nur in `memory/references/meetings/` um und zieht Frontmatter + `meetings.json` lokal nach
-  - keine Fireflies-API-Aktion; gedacht für lokale Nachpflege wie `ohne-channel` → `boku`
+  - keine Fireflies-API-Aktion; gedacht für lokale Nachpflege wie `ohne-channel` → `channel-slug`
 
 Empfohlene Sync-Modi:
 - Standardlauf ohne Zusatzoptionen

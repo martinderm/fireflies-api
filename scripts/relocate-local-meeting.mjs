@@ -127,9 +127,9 @@ const summaryOriginal = fs.readFileSync(summaryFromPath, 'utf8');
 const transcriptOriginal = fs.readFileSync(transcriptFromPath, 'utf8');
 
 const channelId = state.channel_mappings?.[args.toSlug]?.channel_id ?? null;
-const classificationNotesArray = ['chat-review-topic:netzwerke', 'subtopic:eucen'];
-const classificationBasis = ['channel:boku', 'title:6th-eucen-global-seminar', 'summary:eucen-network-lifelong-learning-funding'];
-const llmSummary = 'Lokal nach `boku` verschoben und als Topic `netzwerke` klassifiziert. Inhaltlich klarer EUCEN-/Netzwerkbezug mit Fokus auf Finanzierung von Lifelong Learning; fachlich dem Subtopic EUCEN zuzuordnen.';
+const classificationNotesArray = [`chat-review-topic:${args.topicSlug}`];
+const classificationBasis = [`channel:${args.toSlug}`, 'manual-relocation'];
+const llmSummary = `Lokal nach \`${args.toSlug}\` verschoben und als Topic \`${args.topicSlug}\` klassifiziert.`;
 const classificationNotesInline = classificationNotesArray.join('; ');
 
 const sharedPathReplacements = [

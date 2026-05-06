@@ -9,6 +9,7 @@ Diese Referenz sammelt die wichtigsten Felder des Fireflies-`Transcript`-Schemas
 ## Wichtige Transcript-Felder
 
 ### Identität und Links
+
 - `id`
   - eindeutige Transcript-ID
 - `title`
@@ -19,6 +20,7 @@ Diese Referenz sammelt die wichtigsten Felder des Fireflies-`Transcript`-Schemas
   - Webkonferenz-URL des Meetings, falls unterstützt
 
 ### Personen und Teilnehmer
+
 - `organizer_email`
   - E-Mail des Organizers
 - `user`
@@ -39,6 +41,7 @@ Diese Referenz sammelt die wichtigsten Felder des Fireflies-`Transcript`-Schemas
   - deprecated
 
 ### Zeit und Dauer
+
 - `duration`
   - Audiolänge in Minuten
 - `dateString`
@@ -47,6 +50,7 @@ Diese Referenz sammelt die wichtigsten Felder des Fireflies-`Transcript`-Schemas
   - Millisekunden seit Unix-Epoch, UTC
 
 ### Inhalte
+
 - `sentence`
   - Liste von Sentence-Objekten mit Transkriptinhalt
 - `summary`
@@ -55,6 +59,7 @@ Diese Referenz sammelt die wichtigsten Felder des Fireflies-`Transcript`-Schemas
   - Vorschau auf AI-App-Outputs, maximal 5 neueste
 
 ### Meeting-Metadaten
+
 - `meeting_info`
   - zusätzliche Metadaten
 - `calendar_id`
@@ -71,12 +76,14 @@ Diese Referenz sammelt die wichtigsten Felder des Fireflies-`Transcript`-Schemas
   - ob das Meeting aktuell live ist
 
 ### Downloads und Medien
+
 - `audio_url`
   - signierte Download-URL für Audio, läuft nach 24h ab, planabhängig
 - `video_url`
   - signierte Download-URL für Video, läuft nach 24h ab, planabhängig und nur mit aktiviertem Meeting-Video
 
 ### Analytics
+
 - `analytics`
   - MeetingAnalytics mit Sentiments, Kategorien und Sprecher-Analysen
   - planabhängig
@@ -98,6 +105,7 @@ memory/
 ```
 
 Regeln:
+
 - `meetings.json` im Hauptordner pflegen.
 - Für den Ordnernamen standardmäßig den ersten Eintrag aus `channels` verwenden.
 - Wenn `channels` leer ist, sinnvollen Fallback wie `ohne-channel` verwenden.
@@ -110,6 +118,7 @@ Regeln:
 Neutral als Top-Level-Objekt mit getrennten Bereichen für Sync-Strategie, Mapping und Meetings.
 
 Regel:
+
 - `meetings.json` ist **kanonischer Index + Routing-/Review-Zustand**.
 - Reichere Meeting-Metadaten sollen bevorzugt im **Frontmatter** der Meeting-Dateien liegen.
 - `meetings.json` soll daher kompakt bleiben und keine unnötig großen Detailblöcke duplizieren.
@@ -123,9 +132,9 @@ Regel:
     "classification_source_of_truth": "chat_review_classification"
   },
   "channel_mappings": {
-    "boku": {
+    "channel-slug": {
       "channel_id": "channel-id",
-      "channel_title": "BOKU",
+      "channel_title": "CHANNEL-TITLE",
       "routing_mode": "unmapped",
       "project_slug": null,
       "topic_slug": null,
@@ -141,10 +150,10 @@ Regel:
       "date": 1776757200000,
       "dateString": "2026-04-21T07:40:00.000Z",
       "duration": 42,
-      "channel": "BOKU",
-      "channel_slug": "boku",
+      "channel": "CHANNEL-TITLE",
+      "channel_slug": "channel-slug",
       "channel_id": "channel-id",
-      "channels": ["BOKU"],
+      "channels": ["CHANNEL-TITLE"],
       "project_slug": null,
       "topic_slug": null,
       "project_slugs": [],
@@ -154,22 +163,22 @@ Regel:
       "classification_status": "unmapped",
       "classification_confidence": "low",
       "classification_notes": ["chat-review-classification-pending"],
-      "classification_basis": ["channel:boku"],
+      "classification_basis": ["channel:channel-slug"],
       "review_recommended": true,
       "review_reason": "chat-review-classification-required",
       "classifier_mode": "chat-review",
       "review_input": {
         "source": "sync-intake",
         "title": "Meeting Title",
-        "channel": "BOKU",
-        "channel_slug": "boku",
+        "channel": "CHANNEL-TITLE",
+        "channel_slug": "channel-slug",
         "routing_mode": "unmapped",
         "keywords": ["keyword-1", "keyword-2"],
         "project_slug": null,
         "topic_slug": null,
         "classification_status": "unmapped",
         "classification_confidence": "low",
-        "classification_basis": ["channel:boku"],
+        "classification_basis": ["channel:channel-slug"],
         "review_recommended": true,
         "review_reason": "chat-review-classification-required"
       },
@@ -193,8 +202,8 @@ Regel:
       "summary_keywords": ["keyword-1", "keyword-2"],
       "summary_has_notes": true,
       "summary_extended_sections_count": 1,
-      "summary_path": "memory/references/meetings/boku/2026-04-21-meeting-title.summary.md",
-      "transcript_path": "memory/references/meetings/boku/2026-04-21-meeting-title.transcript.md",
+      "summary_path": "memory/references/meetings/channel-slug/2026-04-21-meeting-title.summary.md",
+      "transcript_path": "memory/references/meetings/channel-slug/2026-04-21-meeting-title.transcript.md",
       "audio_url_present": false,
       "video_url_present": false,
       "analytics_present": false,
@@ -220,18 +229,21 @@ Regel:
 Das Meeting-Schema ist nicht auf Fireflies beschränkt. Es darf auch für manuell importierte Transkripte verwendet werden, zum Beispiel aus Zoom-Sessions, Chat-Datei-Uploads oder lokalen Ordnern wie `Agent-Share/`.
 
 Regeln:
+
 - manuelle Imports werden in dieselbe `meetings.json` und dieselbe Ordnerstruktur geschrieben wie Fireflies-Meetings
 - Summary-Datei und optional Volltranskript-Datei bleiben gleich aufgebaut
 - wenn kein Channel vorhanden ist, `channel` und `channel_slug` neutral oder leer lassen und den Fallback-Ordner verwenden
 - Quelle immer im `source`-Block dokumentieren
 
 Empfohlene `source.system` Werte:
+
 - `fireflies`
 - `zoom`
 - `manual-import`
 - `other`
 
 Empfohlene Zusatzfelder im `source`-Block:
+
 - `import_mode`
   - zum Beispiel `chat-upload`, `local-folder`, `manual-paste`
 - `origin_path`
@@ -246,6 +258,7 @@ Empfohlene Zusatzfelder im `source`-Block:
 `channel_mappings` hält die lokale Beschreibung von Fireflies-Channel-Slugs als knappe Intake-Container sowie optionale Routingdefaults auf Channel-Ebene.
 
 Felder:
+
 - `channel_id`
   - originale Fireflies-Channel-ID
 - `channel_title`
@@ -262,6 +275,7 @@ Felder:
   - freie Notiz für Begründung, Sonderfall oder Prüfhinweis
 
 Empfohlene Werte für `routing_mode`:
+
 - `unmapped`
   - Standard für reine Intake-Channels; fachliche Zuordnung erfolgt später
 - `fixed_project`
@@ -272,6 +286,7 @@ Empfohlene Werte für `routing_mode`:
   - nur verwenden, wenn ein Channel belastbar für eine feste Projekt- und Topic-Kombination steht
 
 Empfohlene Werte für `mapping_source`:
+
 - `manual`
   - händisch gesetzte Zuordnung
 - `derived_project`
@@ -353,6 +368,7 @@ Zusätzlich zu den inhaltlichen Meeting-Feldern sind diese Betriebsfelder wichti
   - ursprünglicher Dateiname oder Quellname
 
 Praktische Bedeutung:
+
 - `project_slug` und `topic_slug` sind die kanonischen Fachverlinkungen, sobald im Chat eine belastbare Entscheidung getroffen wurde.
 - `project_slugs`, `topic_slugs`, `project_matches` und `topic_matches` sind optional und nur nötig, wenn spätere Mehrfachkontexte oder Evidenzlisten bewusst dokumentiert werden sollen.
 - `classification_*` und `classification_basis` steuern Nacharbeit, Nachvollziehbarkeit und Review.
@@ -374,16 +390,16 @@ slug: "meeting-title"
 date: 1776757200000
 dateString: "2026-04-21T07:40:00.000Z"
 duration: 42
-channel: "BOKU"
-channel_slug: "boku"
+channel: "CHANNEL-TITLE"
+channel_slug: "channel-slug"
 channel_id: "channel-id"
-channels: ["BOKU"]
+channels: ["CHANNEL-TITLE"]
 project_slug: null
 topic_slug: null
 classification_status: "unmapped"
 classification_confidence: "low"
 classification_notes: ["chat-review-classification-pending"]
-classification_basis: ["channel:boku"]
+classification_basis: ["channel:channel-slug"]
 review_recommended: true
 review_reason: "chat-review-classification-required"
 llm_review_status: "pending"
@@ -427,6 +443,7 @@ source_account_ref: "account@example.com"
 ```
 
 Praktische Regel:
+
 - **Frontmatter** trägt die reicheren Meeting-Metadaten für direkte Dateiinspektion.
 - **`meetings.json`** hält denselben Kernzustand weiterhin zentral, aber möglichst ohne unnötig große Detailblöcke.
 
@@ -526,5 +543,5 @@ Text...
 ## Quelle
 
 - Transcript Schema
-  - URL: https://docs.fireflies.ai/schema/transcript
+  - URL: <https://docs.fireflies.ai/schema/transcript>
   - Gelesen: 2026-04-21

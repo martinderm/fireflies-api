@@ -1,0 +1,8 @@
+# Local secrets and sensitive config
+secrets.json
+
+# Local runtime files
+*.log
+
+# OS/editor artifacts
+.DS_Store
