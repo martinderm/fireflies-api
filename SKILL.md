@@ -119,6 +119,7 @@ Kurzregeln:
 - Volltranskript bei vollständigem Abruf als zweite Markdown-Datei anlegen
 - stabile slug-basierte Dateinamen verwenden
 - `project_slug` und `topic_slug` mit den Katalog-Skills `project-catalog-entry` und `topic-catalog-entry` kompatibel halten
+- **Verschiebung & Pfadkonsistenz**: Die physischen Meeting-Dateien (Zusammenfassung/Volltranskript) können nachträglich in spezifischere Zielordner (wie Projekt-, Topic- oder Eventstrukturen) verschoben werden. In diesem Fall **müssen** die entsprechenden Pfade (`summary_path` und `transcript_path`) in `memory/references/meetings/meetings.json` angepasst werden, damit die JSON die kanonische Quelle für alle lokalen Meetings bleibt.
 
 ### 2) Audio hochladen
 
