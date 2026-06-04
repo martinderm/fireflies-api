@@ -145,7 +145,7 @@ Regeln:
 - wenn Channel-Zuordnung fehlt, sinnvollen Fallback-Ordner verwenden und Mapping offenlassen statt etwas zu erfinden
 - bei manuellen Imports aus dem Inhalt nach Möglichkeit dieselben Klassifikations- und Routingregeln anwenden wie bei Fireflies-Meetings
 - falls Rohformat oder Qualität schlecht sind, das im Meeting-Eintrag und in der Summary kenntlich machen
-- wenn nur ein Transcript vorliegt und keine vorhandene Summary verfügbar ist, nach `references/summary-format.md` eine eigene Meeting-Summary erzeugen
+- wenn nur ein Transcript vorliegt, keine vorhandene Summary verfügbar ist oder die gelieferte Summary unzureichende Inhalte (z. B. leere Abschnitte) aufweist, nach `references/summary-format.md` eine eigene Meeting-Summary anhand des Transkripts erzeugen
 
 ### 4) Webhook-Integration
 
