@@ -7,7 +7,7 @@ const ENDPOINT = 'https://api.fireflies.ai/graphql';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const WORKSPACE_ROOT = path.resolve(__dirname, '..', '..', '..');
+const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || path.resolve(__dirname, '..', '..', '..');
 
 function candidateSecretsPaths() {
   return [

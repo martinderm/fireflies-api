@@ -7,7 +7,7 @@ import { LIST_MEETINGS_FIELDS, buildGetMeetingQuery, buildListMeetingsRequest } 
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const workspaceRoot = path.resolve(__dirname, '..', '..', '..');
+const workspaceRoot = process.env.WORKSPACE_ROOT || path.resolve(__dirname, '..', '..', '..');
 const meetingsRoot = path.join(workspaceRoot, 'memory', 'references', 'meetings');
 const meetingsJsonPath = path.join(meetingsRoot, 'meetings.json');
 const ACCOUNT_REF = process.env.FIREFLIES_ACCOUNT || null;
