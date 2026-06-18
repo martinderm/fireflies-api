@@ -2,15 +2,24 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { firefliesGraphQL, printError, printJson } from './_fireflies-client.mjs';
+import { firefliesGraphQL, printError, printJson, loadSettingsJson } from './_fireflies-client.mjs';
 import { LIST_MEETINGS_FIELDS, buildGetMeetingQuery, buildListMeetingsRequest } from './_fireflies-meetings.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const workspaceRoot = process.env.WORKSPACE_ROOT || path.resolve(__dirname, '..', '..', '..');
-const meetingsRoot = path.join(workspaceRoot, 'memory', 'references', 'meetings');
+const rawRoot = path.resolve(__dirname, '..', '..', '..');
+const workspaceRoot = process.env.WORKSPACE_ROOT || (path.basename(rawRoot) === '.agents' ? path.dirname(rawRoot) : rawRoot);
+
+
+const settings = loadSettingsJson();
+const settingsMeetingsRoot = settings?.['fireflies-api']?.meetingsRoot || settings?.fireflies?.meetingsRoot;
+const meetingsRoot = settingsMeetingsRoot 
+  ? (path.isAbsolute(settingsMeetingsRoot) ? settingsMeetingsRoot : path.join(workspaceRoot, settingsMeetingsRoot))
+  : path.join(workspaceRoot, 'memory', 'references', 'meetings');
+
 const meetingsJsonPath = path.join(meetingsRoot, 'meetings.json');
-const ACCOUNT_REF = process.env.FIREFLIES_ACCOUNT || null;
+const ACCOUNT_REF = process.env.FIREFLIES_ACCOUNT || settings?.['fireflies-api']?.account || settings?.fireflies?.account || null;
+
 const ENDPOINT = 'https://api.fireflies.ai/graphql';
 const CLOUD_TITLE_SUFFIX = ' (syncd)';
 const UPDATE_MEETING_TITLE_MUTATION = `mutation UpdateMeetingTitle($input: UpdateMeetingTitleInput!) {

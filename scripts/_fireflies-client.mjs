@@ -7,12 +7,15 @@ const ENDPOINT = 'https://api.fireflies.ai/graphql';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || path.resolve(__dirname, '..', '..', '..');
+const rawRoot = path.resolve(__dirname, '..', '..', '..');
+const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || (path.basename(rawRoot) === '.agents' ? path.dirname(rawRoot) : rawRoot);
+
 
 function candidateSecretsPaths() {
   return [
-    path.join(os.homedir(), '.openclaw', 'secrets.json'),
-    path.join(WORKSPACE_ROOT, 'secrets.json')
+    path.join(process.cwd(), 'secrets.json'),
+    path.join(WORKSPACE_ROOT, 'secrets.json'),
+    path.join(os.homedir(), '.openclaw', 'secrets.json')
   ];
 }
 
@@ -32,9 +35,34 @@ function loadSecretsJson() {
   throw new Error(`missing_secrets_file:${tried.join('|')}`);
 }
 
+export function loadSettingsJson() {
+  const candidates = [
+    path.join(process.cwd(), 'settings.json'),
+    path.join(WORKSPACE_ROOT, 'settings.json')
+  ];
+  for (const settingsPath of candidates) {
+    if (fs.existsSync(settingsPath)) {
+      try {
+        const raw = fs.readFileSync(settingsPath, 'utf8');
+        return JSON.parse(raw);
+      } catch {
+        // ignore parsing errors
+      }
+    }
+  }
+  return {};
+}
+
+
 function resolveAccount(secrets, requestedAccount) {
   if (requestedAccount) {
     return requestedAccount;
+  }
+
+  const settings = loadSettingsJson();
+  const settingsAccount = settings?.['fireflies-api']?.account || settings?.fireflies?.account;
+  if (settingsAccount) {
+    return settingsAccount;
   }
 
   const accounts = secrets?.integrations?.fireflies?.accounts;
@@ -45,6 +73,7 @@ function resolveAccount(secrets, requestedAccount) {
   const firstAccount = Object.keys(accounts).find((key) => Boolean(key));
   return firstAccount ?? null;
 }
+
 
 export function loadApiKey(account) {
   const secrets = loadSecretsJson();

@@ -4,7 +4,9 @@ import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const workspaceRoot = path.resolve(__dirname, '..', '..', '..');
+const rawRoot = path.resolve(__dirname, '..', '..', '..');
+const workspaceRoot = path.basename(rawRoot) === '.agents' ? path.dirname(rawRoot) : rawRoot;
+
 const meetingsRoot = path.join(workspaceRoot, 'memory', 'references', 'meetings');
 const meetingsJsonPath = path.join(meetingsRoot, 'meetings.json');
 
