@@ -8,7 +8,9 @@ const ENDPOINT = 'https://api.fireflies.ai/graphql';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rawRoot = path.resolve(__dirname, '..', '..', '..');
-const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || (path.basename(rawRoot) === '.agents' ? path.dirname(rawRoot) : rawRoot);
+const scriptRoot = path.basename(rawRoot) === '.agents' ? path.dirname(rawRoot) : rawRoot;
+const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || (fs.existsSync(path.join(process.cwd(), 'settings.json')) ? process.cwd() : scriptRoot);
+
 
 
 function candidateSecretsPaths() {

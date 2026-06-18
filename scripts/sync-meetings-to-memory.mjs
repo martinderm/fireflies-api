@@ -8,7 +8,9 @@ import { LIST_MEETINGS_FIELDS, buildGetMeetingQuery, buildListMeetingsRequest } 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rawRoot = path.resolve(__dirname, '..', '..', '..');
-const workspaceRoot = process.env.WORKSPACE_ROOT || (path.basename(rawRoot) === '.agents' ? path.dirname(rawRoot) : rawRoot);
+const scriptRoot = path.basename(rawRoot) === '.agents' ? path.dirname(rawRoot) : rawRoot;
+const workspaceRoot = process.env.WORKSPACE_ROOT || (fs.existsSync(path.join(process.cwd(), 'settings.json')) ? process.cwd() : scriptRoot);
+
 
 
 const settings = loadSettingsJson();

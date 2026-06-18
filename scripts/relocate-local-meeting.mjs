@@ -5,7 +5,9 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rawRoot = path.resolve(__dirname, '..', '..', '..');
-const workspaceRoot = path.basename(rawRoot) === '.agents' ? path.dirname(rawRoot) : rawRoot;
+const scriptRoot = path.basename(rawRoot) === '.agents' ? path.dirname(rawRoot) : rawRoot;
+const workspaceRoot = fs.existsSync(path.join(process.cwd(), 'settings.json')) ? process.cwd() : scriptRoot;
+
 
 const meetingsRoot = path.join(workspaceRoot, 'memory', 'references', 'meetings');
 const meetingsJsonPath = path.join(meetingsRoot, 'meetings.json');
