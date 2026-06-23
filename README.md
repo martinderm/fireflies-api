@@ -17,6 +17,7 @@ Kompakter Skill für Fireflies GraphQL-Workflows (Meetings, Channels, Transcript
   - `secrets.json` im Workspace-Root (Fallback)
   - `~/.openclaw/secrets.json`
 - Wichtige Sicherheitsregel: `secrets.json` niemals committen oder in Pull Requests aufnehmen.
+- CLI-Aufrufe bevorzugt aus dem Agent-Workspace-Root starten. Wenn direkt aus dem Shared-Skill-Ordner gearbeitet wird, `WORKSPACE_ROOT` explizit setzen.
 
 Erwartete Struktur:
 

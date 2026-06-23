@@ -37,6 +37,7 @@ Wenn du Fireflies noch nicht gut genug kennst oder wenn sich das Thema nach aktu
 Vor der Nutzung in einem Agent-Workspace sicherstellen:
 - Der Shared Skill ist lokal unter `.agents/skills/fireflies-api` verlinkt.
 - Die zugehoerige Secret-Datei ist unter `.agents/secrets.json` verlinkt oder alternativ als `secrets.json` im Workspace-Root vorhanden.
+- CLI-Aufrufe bevorzugt aus dem Agent-Workspace-Root starten. Falls direkt im Shared-Skill-Ordner gearbeitet wird, `WORKSPACE_ROOT` explizit setzen.
 
 1. Klaere den Use-Case.
    - Lesen: Transcript, Summary, Meeting-Metadaten, Speaker, Search
