@@ -34,7 +34,11 @@ Wenn du Fireflies noch nicht gut genug kennst oder wenn sich das Thema nach aktu
 
 ## Arbeitsweise
 
-1. Kläre den Use-Case.
+Vor der Nutzung in einem Agent-Workspace sicherstellen:
+- Der Shared Skill ist lokal unter `.agents/skills/fireflies-api` verlinkt.
+- Die zugehoerige Secret-Datei ist unter `.agents/secrets.json` verlinkt oder alternativ als `secrets.json` im Workspace-Root vorhanden.
+
+1. Klaere den Use-Case.
    - Lesen: Transcript, Summary, Meeting-Metadaten, Speaker, Search
    - Schreiben: Audio hochladen, ggf. andere Mutations
    - Ereignisse: Webhooks für fertige Transkripte/Summaries
@@ -43,7 +47,7 @@ Wenn du Fireflies noch nicht gut genug kennst oder wenn sich das Thema nach aktu
 2. Prüfe die Auth-Annahme.
    - Fireflies arbeitet laut Doku mit Bearer API Key.
    - Keine Secrets raten oder erfinden.
-   - Lokale Secret-Konvention: `~/.openclaw/secrets.json` unter `integrations.fireflies.accounts.<email>.apiKey`.
+   - Lokale Secret-Konvention: bevorzugt `.agents/secrets.json` im Workspace-Root, alternativ `secrets.json` im Workspace-Root oder `~/.openclaw/secrets.json`, jeweils unter `integrations.fireflies.accounts.<email>.apiKey`.
   - `secrets.json` darf niemals versioniert oder in PRs enthalten sein.
    - Beim Zugriff auf Accounts mit Sonderzeichen in der Mailadresse immer String-Key-Notation verwenden, nicht Dot-Notation.
   - Account-Zugriff erfolgt über `integrations.fireflies.accounts["<email>"].apiKey`.

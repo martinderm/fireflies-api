@@ -11,9 +11,11 @@ Kompakter Skill für Fireflies GraphQL-Workflows (Meetings, Channels, Transcript
 ## Voraussetzungen
 
 - Node.js (empfohlen: aktuelles LTS oder neuer)
+- Der Skill soll in Agent-Workspaces lokal unter `.agents/skills/fireflies-api` verlinkt sein, damit Workspace-Kontext und lokale Secrets konsistent aufgeloest werden.
 - Secrets in einer der folgenden Dateien:
-  - `~/.openclaw/secrets.json`
+  - `.agents/secrets.json` im Workspace-Root (bevorzugt)
   - `secrets.json` im Workspace-Root (Fallback)
+  - `~/.openclaw/secrets.json`
 - Wichtige Sicherheitsregel: `secrets.json` niemals committen oder in Pull Requests aufnehmen.
 
 Erwartete Struktur:

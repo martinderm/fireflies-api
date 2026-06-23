@@ -9,16 +9,81 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rawRoot = path.resolve(__dirname, '..', '..', '..');
 const scriptRoot = path.basename(rawRoot) === '.agents' ? path.dirname(rawRoot) : rawRoot;
-const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || (fs.existsSync(path.join(process.cwd(), 'settings.json')) ? process.cwd() : scriptRoot);
 
+function uniquePaths(paths) {
+  return [...new Set(paths.filter(Boolean).map((entry) => path.resolve(entry)))];
+}
 
+function collectAncestors(startPath) {
+  if (!startPath) {
+    return [];
+  }
+
+  const resolved = path.resolve(startPath);
+  const ancestors = [];
+  let current = resolved;
+
+  while (true) {
+    ancestors.push(current);
+    const parent = path.dirname(current);
+    if (parent === current) {
+      break;
+    }
+    current = parent;
+  }
+
+  return ancestors;
+}
+
+function looksLikeWorkspaceRoot(dirPath) {
+  return [
+    path.join(dirPath, 'settings.json'),
+    path.join(dirPath, 'AGENTS.md'),
+    path.join(dirPath, '.agents'),
+    path.join(dirPath, 'secrets.json')
+  ].some((candidate) => fs.existsSync(candidate));
+}
+
+function candidateWorkspaceRoots() {
+  const envRoot = process.env.WORKSPACE_ROOT;
+  const cwdAncestors = collectAncestors(process.cwd());
+  const argvScriptRoot = process.argv[1]
+    ? path.resolve(path.dirname(path.resolve(process.argv[1])), '..', '..', '..')
+    : null;
+  const derivedRoots = [
+    envRoot,
+    process.cwd(),
+    argvScriptRoot,
+    scriptRoot
+  ];
+
+  const discovered = [];
+  for (const candidate of uniquePaths([...derivedRoots, ...cwdAncestors])) {
+    if (looksLikeWorkspaceRoot(candidate)) {
+      discovered.push(candidate);
+    }
+  }
+
+  return uniquePaths(discovered);
+}
+
+export function resolveWorkspaceRoot() {
+  const roots = candidateWorkspaceRoots();
+  return roots[0] || scriptRoot;
+}
+
+const WORKSPACE_ROOT = resolveWorkspaceRoot();
 
 function candidateSecretsPaths() {
-  return [
-    path.join(process.cwd(), 'secrets.json'),
-    path.join(WORKSPACE_ROOT, 'secrets.json'),
+  const workspaceCandidates = candidateWorkspaceRoots().flatMap((root) => [
+    path.join(root, '.agents', 'secrets.json'),
+    path.join(root, 'secrets.json')
+  ]);
+
+  return uniquePaths([
+    ...workspaceCandidates,
     path.join(os.homedir(), '.openclaw', 'secrets.json')
-  ];
+  ]);
 }
 
 function loadSecretsJson() {
@@ -38,10 +103,7 @@ function loadSecretsJson() {
 }
 
 export function loadSettingsJson() {
-  const candidates = [
-    path.join(process.cwd(), 'settings.json'),
-    path.join(WORKSPACE_ROOT, 'settings.json')
-  ];
+  const candidates = uniquePaths(candidateWorkspaceRoots().map((root) => path.join(root, 'settings.json')));
   for (const settingsPath of candidates) {
     if (fs.existsSync(settingsPath)) {
       try {
@@ -54,7 +116,6 @@ export function loadSettingsJson() {
   }
   return {};
 }
-
 
 function resolveAccount(secrets, requestedAccount) {
   if (requestedAccount) {
@@ -75,7 +136,6 @@ function resolveAccount(secrets, requestedAccount) {
   const firstAccount = Object.keys(accounts).find((key) => Boolean(key));
   return firstAccount ?? null;
 }
-
 
 export function loadApiKey(account) {
   const secrets = loadSecretsJson();
