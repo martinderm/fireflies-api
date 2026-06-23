@@ -46,19 +46,22 @@ function looksLikeWorkspaceRoot(dirPath) {
 
 function candidateWorkspaceRoots() {
   const envRoot = process.env.WORKSPACE_ROOT;
+  const logicalPwd = process.env.PWD;
   const cwdAncestors = collectAncestors(process.cwd());
+  const logicalPwdAncestors = collectAncestors(logicalPwd);
   const argvScriptRoot = process.argv[1]
     ? path.resolve(path.dirname(path.resolve(process.argv[1])), '..', '..', '..')
     : null;
   const derivedRoots = [
     envRoot,
+    logicalPwd,
     process.cwd(),
     argvScriptRoot,
     scriptRoot
   ];
 
   const discovered = [];
-  for (const candidate of uniquePaths([...derivedRoots, ...cwdAncestors])) {
+  for (const candidate of uniquePaths([...derivedRoots, ...cwdAncestors, ...logicalPwdAncestors])) {
     if (looksLikeWorkspaceRoot(candidate)) {
       discovered.push(candidate);
     }
