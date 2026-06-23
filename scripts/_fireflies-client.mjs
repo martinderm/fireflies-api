@@ -191,7 +191,8 @@ export async function firefliesGraphQL({ query, variables = {}, account } = {}) 
 }
 
 export function printJson(obj) {
-  process.stdout.write(`${JSON.stringify(obj, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify(obj, null, 2)}
+`);
 }
 
 export function printError(error) {
@@ -201,5 +202,6 @@ export function printError(error) {
     status: error?.status ?? null,
     body: error?.body ?? null
   };
-  process.stderr.write(`${JSON.stringify(payload, null, 2)}\n`);
+  process.stderr.write(`${JSON.stringify(payload, null, 2)}
+`);
 }

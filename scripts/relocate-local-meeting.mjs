@@ -1,14 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { resolveWorkspaceRoot } from './_fireflies-client.mjs';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const rawRoot = path.resolve(__dirname, '..', '..', '..');
-const scriptRoot = path.basename(rawRoot) === '.agents' ? path.dirname(rawRoot) : rawRoot;
-const workspaceRoot = fs.existsSync(path.join(process.cwd(), 'settings.json')) ? process.cwd() : scriptRoot;
-
-
+const workspaceRoot = resolveWorkspaceRoot();
 const meetingsRoot = path.join(workspaceRoot, 'memory', 'references', 'meetings');
 const meetingsJsonPath = path.join(meetingsRoot, 'meetings.json');
 
