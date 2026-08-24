@@ -99,17 +99,17 @@ Vorgehen:
 - benötigte Felder minimieren
 - Meeting-ID, Transcript-ID oder Filter sauber klären
 - Antwort auf nutzbares internes Format reduzieren
-- relevante, wiederverwendbare oder vollständig abgerufene Meeting-Daten in eine lokale Meeting-Struktur unter `memory/references/meetings/` überführen
+- relevante, wiederverwendbare oder vollständig abgerufene Meeting-Daten in eine lokale Meeting-Struktur unter `memory/evidence/meetings/` (Säule 2, mit automatischem Fallback auf `memory/references/meetings/` in Altsystemen) überführen
 - rein flüchtige Ad-hoc-Checks nur dann persistieren, wenn der Nutzer das verlangt oder spätere Wiederverwendung absehbar ist
 
-#### Lokale Meeting-Ablage
+#### Lokale Meeting-Ablage (Dual-Evidence-Standard)
 
-Wenn Meeting-Daten abgerufen werden, lege oder aktualisiere eine lokale Struktur unter `memory/references/meetings/`.
+Wenn Meeting-Daten abgerufen werden, lege oder aktualisiere eine lokale Struktur unter `memory/evidence/meetings/` (mit Fallback auf `memory/references/meetings/`).
 
 Für Struktur, `meetings.json`, Frontmatter und Markdown-Dateien immer `references/data-model.md` als maßgebliches Schema verwenden.
 
 Kurzregeln:
-- `memory/references/meetings/meetings.json` pflegen
+- `memory/evidence/meetings/meetings.json` pflegen
 - im Top-Level zusätzlich `channel_strategy` mit dem knappen-Channel-Modell führen
 - einen Channel-Filter beim Sync nur als Laufzeitparameter verwenden, nicht als persistierten Meeting-Fakt
 - in `channel_mappings` pro Channel mindestens `routing_mode` mitführen
@@ -124,7 +124,7 @@ Kurzregeln:
 - Volltranskript bei vollständigem Abruf als zweite Markdown-Datei anlegen
 - stabile slug-basierte Dateinamen verwenden
 - `project_slug` und `topic_slug` mit den Katalog-Skills `project-catalog-entry` und `topic-catalog-entry` kompatibel halten
-- **Verschiebung & Pfadkonsistenz**: Die physischen Meeting-Dateien (Zusammenfassung/Volltranskript) können nachträglich in spezifischere Zielordner (wie Projekt-, Topic- oder Eventstrukturen) verschoben werden. In diesem Fall **müssen** die entsprechenden Pfade (`summary_path` und `transcript_path`) in `memory/references/meetings/meetings.json` angepasst werden, damit die JSON die kanonische Quelle für alle lokalen Meetings bleibt.
+- **Verschiebung & Pfadkonsistenz**: Die physischen Meeting-Dateien (Zusammenfassung/Volltranskript) können nachträglich in spezifischere Zielordner (wie Projekt-, Topic- oder Eventstrukturen unter `memory/evidence/`) verschoben werden. In diesem Fall **müssen** die entsprechenden Pfade (`summary_path` und `transcript_path`) in `meetings.json` angepasst werden, damit die JSON die kanonische Quelle für alle lokalen Meetings bleibt.
 
 ### 2) Audio hochladen
 
@@ -144,7 +144,7 @@ Zulässige Quellen:
 - andere lokal verfügbare Textdateien mit Transcript-Inhalt
 
 Regeln:
-- externe oder manuell gelieferte Transkripte inhaltlich auswerten und analog zu Fireflies-Meetings unter `memory/references/meetings/` speichern
+- externe oder manuell gelieferte Transkripte inhaltlich auswerten und analog zu Fireflies-Meetings unter `memory/evidence/meetings/` (bzw. `memory/references/meetings/`) speichern
 - dafür dieselbe Ordnerstruktur, `meetings.json`, Summary-Datei und optional Volltranskript-Datei verwenden
 - im Datenmodell die Quelle sauber markieren, zum Beispiel über `source.system`, `source.import_mode` und `source.origin_path`
 - wenn Channel-Zuordnung fehlt, sinnvollen Fallback-Ordner verwenden und Mapping offenlassen statt etwas zu erfinden
@@ -212,12 +212,12 @@ Aktuelle Skripte:
 - `get-meeting.mjs`
   - lädt ein einzelnes Meeting, `--mode minimal|full`
 - `sync-meetings-to-memory.mjs`
-  - synchronisiert Meetings in `memory/references/meetings/`
+  - synchronisiert Meetings in `memory/evidence/meetings/` (mit Fallback auf `memory/references/meetings/`)
 - `probe-meeting-capabilities.mjs`
   - prüft für ein konkretes Meeting read-only, welche Felder/Artefakte im aktuellen Account/Plan tatsächlich befüllt oder gesperrt sind
   - Einsatz: kurze Capability-Checks, bevor neue Metadaten dauerhaft in den Sync übernommen werden
 - `relocate-local-meeting.mjs`
-  - hängt ein bereits lokal gespiegeltes Meeting nur in `memory/references/meetings/` um und zieht Frontmatter + `meetings.json` lokal nach
+  - hängt ein bereits lokal gespiegeltes Meeting nur in `memory/evidence/meetings/` (oder `memory/references/meetings/`) um und zieht Frontmatter + `meetings.json` lokal nach
   - keine Fireflies-API-Aktion; gedacht für lokale Nachpflege wie `ohne-channel` → `channel-slug`
 
 Empfohlene Sync-Modi:

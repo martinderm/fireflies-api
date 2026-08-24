@@ -3,7 +3,21 @@ import path from 'node:path';
 import { resolveWorkspaceRoot } from './_fireflies-client.mjs';
 
 const workspaceRoot = resolveWorkspaceRoot();
-const meetingsRoot = path.join(workspaceRoot, 'memory', 'references', 'meetings');
+
+function resolveMeetingsRoot(wsRoot) {
+  const evidenceMeetings = path.join(wsRoot, 'memory', 'evidence', 'meetings');
+  const evidenceRoot = path.join(wsRoot, 'memory', 'evidence');
+  if (fs.existsSync(evidenceMeetings) || fs.existsSync(evidenceRoot)) {
+    return evidenceMeetings;
+  }
+  const legacyMeetings = path.join(wsRoot, 'memory', 'references', 'meetings');
+  if (fs.existsSync(legacyMeetings)) {
+    return legacyMeetings;
+  }
+  return evidenceMeetings;
+}
+
+const meetingsRoot = resolveMeetingsRoot(workspaceRoot);
 const meetingsJsonPath = path.join(meetingsRoot, 'meetings.json');
 
 function parseArgs(argv) {

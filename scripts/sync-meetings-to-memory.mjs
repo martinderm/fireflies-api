@@ -6,10 +6,28 @@ import { LIST_MEETINGS_FIELDS, buildGetMeetingQuery, buildListMeetingsRequest } 
 
 const workspaceRoot = resolveWorkspaceRoot();
 const settings = loadSettingsJson();
-const settingsMeetingsRoot = settings?.['fireflies-api']?.meetingsRoot || settings?.fireflies?.meetingsRoot;
-const meetingsRoot = settingsMeetingsRoot
-  ? (path.isAbsolute(settingsMeetingsRoot) ? settingsMeetingsRoot : path.join(workspaceRoot, settingsMeetingsRoot))
-  : path.join(workspaceRoot, 'memory', 'references', 'meetings');
+
+function resolveMeetingsRoot(wsRoot, settingsObj) {
+  const custom = settingsObj?.['fireflies-api']?.meetingsRoot || settingsObj?.fireflies?.meetingsRoot;
+  if (custom) {
+    return path.isAbsolute(custom) ? custom : path.join(wsRoot, custom);
+  }
+  // 1. Dual Evidence Standard: prefer memory/evidence/meetings
+  const evidenceMeetings = path.join(wsRoot, 'memory', 'evidence', 'meetings');
+  const evidenceRoot = path.join(wsRoot, 'memory', 'evidence');
+  if (fs.existsSync(evidenceMeetings) || fs.existsSync(evidenceRoot)) {
+    return evidenceMeetings;
+  }
+  // 2. Legacy Fallback: check if memory/references/meetings exists
+  const legacyMeetings = path.join(wsRoot, 'memory', 'references', 'meetings');
+  if (fs.existsSync(legacyMeetings)) {
+    return legacyMeetings;
+  }
+  // 3. Default for new setups: memory/evidence/meetings
+  return evidenceMeetings;
+}
+
+const meetingsRoot = resolveMeetingsRoot(workspaceRoot, settings);
 const meetingsJsonPath = path.join(meetingsRoot, 'meetings.json');
 const ACCOUNT_REF = process.env.FIREFLIES_ACCOUNT || settings?.['fireflies-api']?.account || settings?.fireflies?.account || null;
 const ENDPOINT = 'https://api.fireflies.ai/graphql';
