@@ -3,9 +3,12 @@ name: fireflies-api
 description: Arbeite mit der Fireflies API für Meeting-Transkripte, Summaries, Speaker-Daten, Uploads und Webhooks. Verwende diesen Skill, wenn Fireflies analysiert, integriert, automatisiert oder über API/GraphQL angebunden werden soll, besonders für Fragen zu Auth, Query-Struktur, Uploads, Transcript-Abruf, Summaries, Search und Webhooks.
 ---
 
-# Fireflies API
+# Fireflies API (SaaS-Adapter)
 
-Nutze diesen Skill für Fireflies-Arbeit. Bevor du konkrete API-Operationen planst oder implementierst, hole dir den aktuellen Stand aus der offiziellen Doku.
+> **Architektur-Rolle:** Technischer SaaS-Adapter für Fireflies.ai (GraphQL, Audio-Upload, Transkript-Abruf, Webhooks).  
+> **Workflow-Orchestrierung:** Die übergeordnete thematische Klassifikation, Evidenz-Ablage und Action-Item-Triage im Workspace wird durch **[`office-intelligence/meeting-desk`](file:///D:/users/dagobert/agents/skills/office-intelligence/skills/meeting-desk/SKILL.md)** gesteuert.
+
+Nutze diesen Skill für direkte Fireflies-API-Operationen. Bevor du konkrete API-Operationen planst oder implementierst, hole dir den aktuellen Stand aus der offiziellen Doku.
 
 ## Offizielle Doku
 
