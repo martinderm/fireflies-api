@@ -9,3 +9,6 @@ secrets.json
 
 # Workspace lock (volatile)
 .agents/session.lock
+
+# Local meeting mirror (not part of the skill adapter)
+memory/

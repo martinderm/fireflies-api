@@ -5,4 +5,4 @@
 - [meetings-schema](meetings-schema.md) — live / verified, 2026-09-30
 - [cli](cli.md) — live / verified, 2026-09-30
 - [sync](sync.md) — live / verified, 2026-09-30
-- [quality](quality.md) — live / verified, 2026-09-30 (22 Tests)
+- [quality](quality.md) — live / verified, 2026-09-30 (26 Tests)

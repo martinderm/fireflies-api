@@ -105,6 +105,32 @@ test('parseArgs: value flags reject a following flag instead of swallowing it', 
   }
 });
 
+test('parseArgs: trailing --mode without a value throws missing value', () => {
+  assert.throws(
+    () => parseGetMeetingArgs(['abc123', '--mode']),
+    /missing value for --mode/
+  );
+});
+
+test('parseArgs: trailing --format without a value throws missing value', () => {
+  assert.throws(
+    () => parseGetMeetingArgs(['abc123', '--format']),
+    /missing value for --format/
+  );
+});
+
+test('parseArgs: trailing --output without a value throws missing value', () => {
+  assert.throws(
+    () => parseGetMeetingArgs(['abc123', '--output']),
+    /missing value for --output/
+  );
+});
+
+test('parseArgs: trailing --sentences-only stays a legitimate value-less flag', () => {
+  const args = parseGetMeetingArgs(['abc123', '--sentences-only']);
+  assert.equal(args.sentencesOnly, true);
+});
+
 test('parseArgs: value flags still accept legitimate values', () => {
   const args = parseGetMeetingArgs(['abc123', '--mode', 'full', '--format', 'markdown', '--output', 'out.md']);
   assert.equal(args.mode, 'full');

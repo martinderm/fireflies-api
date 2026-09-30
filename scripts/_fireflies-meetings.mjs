@@ -171,7 +171,7 @@ export function renderTranscriptMarkdown(meeting, options = {}) {
 }
 
 function rejectFlagValue(flag, value) {
-  if (value.startsWith('--')) {
+  if (value === undefined || value.startsWith('--')) {
     throw new Error(`missing value for ${flag}`);
   }
 }
@@ -189,17 +189,15 @@ export function parseGetMeetingArgs(argv) {
 
     if (!args.transcriptId && !arg.startsWith('--')) {
       args.transcriptId = arg;
-    } else if (arg === '--mode' && next) {
+    } else if (arg === '--mode' || arg === '--format' || arg === '--output') {
       rejectFlagValue(arg, next);
-      args.mode = next;
-      i += 1;
-    } else if (arg === '--format' && next) {
-      rejectFlagValue(arg, next);
-      args.format = next;
-      i += 1;
-    } else if (arg === '--output' && next) {
-      rejectFlagValue(arg, next);
-      args.output = next;
+      if (arg === '--mode') {
+        args.mode = next;
+      } else if (arg === '--format') {
+        args.format = next;
+      } else {
+        args.output = next;
+      }
       i += 1;
     } else if (arg === '--sentences-only') {
       args.sentencesOnly = true;

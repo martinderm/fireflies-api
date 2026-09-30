@@ -54,8 +54,9 @@ function writeJson(dir, name, document) {
   return filePath;
 }
 
-test('fallback: skip existing candidate without fireflies and take later fireflies candidate', () => {
+test('fallback: skip existing candidate without fireflies and take later fireflies candidate', (t) => {
   const dir = makeTempDir();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const foreignPath = writeJson(dir, 'secrets.json', FOREIGN_DOC);
   const firefliesPath = writeJson(dir, 'openclaw-secrets.json', FIREFLIES_DOC);
 
@@ -64,8 +65,9 @@ test('fallback: skip existing candidate without fireflies and take later firefli
   assert.deepEqual(result, FIREFLIES_DOC);
 });
 
-test('priority: first existing candidate with fireflies wins over later candidates', () => {
+test('priority: first existing candidate with fireflies wins over later candidates', (t) => {
   const dir = makeTempDir();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const localPath = writeJson(dir, 'local.json', FIREFLIES_DOC);
   const laterPath = writeJson(dir, 'later.json', LATER_FIREFLIES_DOC);
 
@@ -74,8 +76,9 @@ test('priority: first existing candidate with fireflies wins over later candidat
   assert.deepEqual(result, FIREFLIES_DOC);
 });
 
-test('no candidate with fireflies: first existing document is returned', () => {
+test('no candidate with fireflies: first existing document is returned', (t) => {
   const dir = makeTempDir();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const firstPath = writeJson(dir, 'first.json', FOREIGN_DOC);
   const secondPath = writeJson(dir, 'second.json', OTHER_FOREIGN_DOC);
 
@@ -84,8 +87,9 @@ test('no candidate with fireflies: first existing document is returned', () => {
   assert.deepEqual(result, FOREIGN_DOC);
 });
 
-test('no existing candidate: missing_secrets_file lists every tried path', () => {
+test('no existing candidate: missing_secrets_file lists every tried path', (t) => {
   const dir = makeTempDir();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const missingA = path.join(dir, 'missing-a.json');
   const missingB = path.join(dir, 'missing-b.json');
 
@@ -100,16 +104,18 @@ test('no existing candidate: missing_secrets_file lists every tried path', () =>
   );
 });
 
-test('invalid JSON still throws', () => {
+test('invalid JSON still throws', (t) => {
   const dir = makeTempDir();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const brokenPath = path.join(dir, 'broken.json');
   fs.writeFileSync(brokenPath, '{ "integrations": ', 'utf8');
 
   assert.throws(() => loadSecretsJson([brokenPath]), SyntaxError);
 });
 
-test('lazy scan: a later invalid candidate does not break an earlier fireflies match', () => {
+test('lazy scan: a later invalid candidate does not break an earlier fireflies match', (t) => {
   const dir = makeTempDir();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const firefliesPath = writeJson(dir, 'fireflies.json', FIREFLIES_DOC);
   const brokenPath = path.join(dir, 'broken.json');
   fs.writeFileSync(brokenPath, '{ "integrations": ', 'utf8');
