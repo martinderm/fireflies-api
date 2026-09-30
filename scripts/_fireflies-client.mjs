@@ -89,20 +89,40 @@ function candidateSecretsPaths() {
   ]);
 }
 
-function loadSecretsJson() {
-  const tried = [];
+function hasFirefliesCredentials(document) {
+  const accounts = document?.integrations?.fireflies?.accounts;
+  return Boolean(accounts) && typeof accounts === 'object' && Object.keys(accounts).length > 0;
+}
 
-  for (const secretsPath of candidateSecretsPaths()) {
+export function loadSecretsJson(candidatePaths = candidateSecretsPaths()) {
+  const tried = [];
+  let fallback;
+  let hasFallback = false;
+
+  for (const secretsPath of candidatePaths) {
     tried.push(secretsPath);
     if (!fs.existsSync(secretsPath)) {
       continue;
     }
 
     const raw = fs.readFileSync(secretsPath, 'utf8');
-    return JSON.parse(raw);
+    const document = JSON.parse(raw);
+
+    if (!hasFallback) {
+      fallback = document;
+      hasFallback = true;
+    }
+
+    if (hasFirefliesCredentials(document)) {
+      return document;
+    }
   }
 
-  throw new Error(`missing_secrets_file:${tried.join('|')}`);
+  if (!hasFallback) {
+    throw new Error(`missing_secrets_file:${tried.join('|')}`);
+  }
+
+  return fallback;
 }
 
 export function loadSettingsJson() {
