@@ -6,3 +6,6 @@ secrets.json
 
 # OS/editor artifacts
 .DS_Store
+
+# Workspace lock (volatile)
+.agents/session.lock
