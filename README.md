@@ -37,7 +37,7 @@ Erwartete Struktur:
 
 ## Schnellstart
 
-Vom Repo-Root [skills/fireflies-api](skills/fireflies-api):
+Vom Repo-Root (Verzeichnis dieses README):
 
 ```bash
 node scripts/list-channels.mjs
