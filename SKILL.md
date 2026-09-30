@@ -213,7 +213,9 @@ Aktuelle Skripte:
 - `list-meetings.mjs`
   - listet Meetings mit Filtern und Pagination
 - `get-meeting.mjs`
-  - lädt ein einzelnes Meeting, `--mode minimal|full`
+  - lädt ein einzelnes Meeting, `--mode minimal|full|sentences-only`
+  - `--format markdown` rendert den Speaker-Dialog als Markdown (`[mm:ss] Speaker`), `--output <file>` schreibt das Ergebnis in eine Datei (stdout bleibt kurzer Bestätigungs-Envelope)
+  - `--sentences-only` fragt nur die Sentence-Felder ab (kein summary/minimal-Ballast)
 - `sync-meetings-to-memory.mjs`
   - synchronisiert Meetings in `memory/evidence/meetings/` (mit Fallback auf `memory/references/meetings/`)
 - `probe-meeting-capabilities.mjs`

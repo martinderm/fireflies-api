@@ -5,7 +5,7 @@ universe: live
 status: verified
 entity: scripts/get-meeting.mjs
 verified_at: 2026-09-30
-revision: a73fc6b6e937a718510e173e41d379465f5d5993
+revision: dc0d4c2010031b1aeb9b57cd302f741da0122675
 ---
 
 # CLI
@@ -16,7 +16,7 @@ Dünne CLI-Skripte über dem gemeinsamen Client; jeder Aufruf ist ein JSON-Envel
 Skripte bleiben austauschbare Adapter; Argument-Parsing und Fehler-Semantik folgen einem gemeinsamen Muster.
 
 ## Shape
-`get-meeting.mjs` holt ein Meeting per `--mode minimal|full` (Fehler `mode_must_be_minimal_or_full`; Nutzungsfehler exit 2, API-Fehler exit 1) und gibt `{ok, mode, meeting}` aus. `list-meetings.mjs` listet mit Pagination (limit 1–50, skip ≥ 0) und Optionalfiltern sowie `{ok, query, count, meetings}`. `list-channels.mjs` gibt `{ok, count, channels}` aus. `probe-meeting-capabilities.mjs` prüft read-only, welche Felder im Account befüllt sind, optional mit `--include-summary`. Alle Argument-Parser sind handgeschrieben ohne Dependencies.
+`get-meeting.mjs` holt ein Meeting und gibt `{ok, mode, meeting}` als JSON aus. Modi: `--mode minimal|full|sentences-only` (Fehler `mode_must_be_minimal_full_or_sentences_only`), `--format json|markdown` (Fehler `format_must_be_json_or_markdown`), `--sentences-only` (Flag erzwingt den sentences-only-Modus); `--format markdown` rendert timestamped Speaker-Dialog (`[mm:ss] Speaker`, Speaker-Fallback `Unknown Speaker`, Fallback auf `raw_text`, leerer Sentences-Fall → Platzhaltertext), `--output <file>` schreibt das Resultat in eine Datei und bestätigt auf stdout mit kurzem Envelope `{ok, mode, format, output}`. Wert-Flags weisen `--`-beginnende Folge-Flags als Wert fail-loud ab (`missing value for <flag>`, exit 2). `list-meetings.mjs` listet mit Pagination (limit 1–50, skip ≥ 0) und Optionalfiltern sowie `{ok, query, count, meetings}`. `list-channels.mjs` gibt `{ok, count, channels}` aus. `probe-meeting-capabilities.mjs` prüft read-only, welche Felder im Account befüllt sind, optional mit `--include-summary`. Alle Argument-Parser sind handgeschrieben ohne Dependencies.
 
 - [scripts/get-meeting.mjs](../../../scripts/get-meeting.mjs) — `scripts/get-meeting.mjs:1`
 - [scripts/list-meetings.mjs](../../../scripts/list-meetings.mjs) — `scripts/list-meetings.mjs:1`
