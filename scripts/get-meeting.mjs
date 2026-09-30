@@ -1,50 +1,35 @@
+import fs from 'node:fs';
 import { firefliesGraphQL, printError, printJson } from './_fireflies-client.mjs';
-import { buildGetMeetingQuery } from './_fireflies-meetings.mjs';
+import { buildGetMeetingQuery, parseGetMeetingArgs, renderTranscriptMarkdown, validateGetMeetingArgs } from './_fireflies-meetings.mjs';
 
-function parseArgs(argv) {
-  const args = {
-    mode: 'minimal'
-  };
-
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
-    const next = argv[i + 1];
-
-    if (!args.transcriptId && !arg.startsWith('--')) {
-      args.transcriptId = arg;
-    } else if (arg === '--mode' && next) {
-      args.mode = next;
-      i += 1;
-    }
-  }
-
-  return args;
-}
-
-const { transcriptId, mode } = parseArgs(process.argv.slice(2));
-
-if (!transcriptId) {
-  printError(new Error('usage: node get-meeting.mjs <transcriptId> [--mode minimal|full]'));
+let args;
+try {
+  args = validateGetMeetingArgs(parseGetMeetingArgs(process.argv.slice(2)));
+} catch (error) {
+  printError(error);
   process.exit(2);
 }
 
-if (!['minimal', 'full'].includes(mode)) {
-  printError(new Error('mode_must_be_minimal_or_full'));
-  process.exit(2);
-}
+const mode = args.sentencesOnly ? 'sentences-only' : args.mode;
 
 try {
   const query = buildGetMeetingQuery(mode);
   const data = await firefliesGraphQL({
     query,
-    variables: { transcriptId }
+    variables: { transcriptId: args.transcriptId }
   });
 
-  printJson({
-    ok: true,
-    mode,
-    meeting: data?.transcript ?? null
-  });
+  const meeting = data?.transcript ?? null;
+  const result = args.format === 'markdown'
+    ? renderTranscriptMarkdown(meeting)
+    : JSON.stringify({ ok: true, mode, meeting }, null, 2);
+
+  if (args.output) {
+    fs.writeFileSync(args.output, `${result}\n`, 'utf8');
+    printJson({ ok: true, mode, format: args.format, output: args.output });
+  } else {
+    process.stdout.write(`${result}\n`);
+  }
 } catch (error) {
   printError(error);
   process.exit(1);

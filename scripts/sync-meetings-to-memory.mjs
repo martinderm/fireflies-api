@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { firefliesGraphQL, printError, printJson, loadSettingsJson, resolveWorkspaceRoot } from './_fireflies-client.mjs';
-import { LIST_MEETINGS_FIELDS, buildGetMeetingQuery, buildListMeetingsRequest } from './_fireflies-meetings.mjs';
+import { LIST_MEETINGS_FIELDS, buildGetMeetingQuery, buildListMeetingsRequest, renderTranscriptMarkdown } from './_fireflies-meetings.mjs';
 
 const workspaceRoot = resolveWorkspaceRoot();
 const settings = loadSettingsJson();
@@ -200,13 +200,6 @@ function listChannelTitles(meeting) {
   return (meeting.channels ?? []).map((channel) => channel.title).filter(Boolean);
 }
 
-function secondsToClock(seconds) {
-  const total = Math.max(0, Math.floor(Number(seconds) || 0));
-  const mins = String(Math.floor(total / 60)).padStart(2, '0');
-  const secs = String(total % 60).padStart(2, '0');
-  return `${mins}:${secs}`;
-}
-
 function linesFromText(value) {
   const text = String(value ?? '').trim();
   if (!text) return [];
@@ -377,9 +370,7 @@ function buildSummaryMarkdown(meta, meeting, notes) {
 
 function buildTranscriptMarkdown(meta, meeting) {
   const fm = buildFrontmatter(meta);
-  const sentences = (meeting.sentences ?? []).length
-    ? meeting.sentences.map((sentence) => `#### ${secondsToClock(sentence.start_time)} ${sentence.speaker_name ?? 'Unknown Speaker'}\n${sentence.text ?? sentence.raw_text ?? ''}`).join('\n\n')
-    : '_Keine Satzdaten verfügbar._';
+  const sentences = renderTranscriptMarkdown(meeting, { bracketed: false });
 
   return `${fm}# ${meeting.title} - Volltranskript\n\n## Metadaten\n- Meeting ID: ${meeting.id}\n- Datum: ${meeting.dateString ?? '-'}\n- Dauer: ${meeting.duration ?? '-'}\n- Channel: ${meta.channel ?? '-'}\n- Transcript URL: ${meeting.transcript_url ?? '-'}\n\n## Volltranskript\n\n${sentences}\n`;
 }

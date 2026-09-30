@@ -100,8 +100,7 @@ export const MINIMAL_MEETING_FIELDS = `
   is_live
 `;
 
-export const FULL_ONLY_MEETING_FIELDS = `
-  sentences {
+const SENTENCE_FIELDS = `  sentences {
     index
     speaker_name
     speaker_id
@@ -121,13 +120,109 @@ export const FULL_ONLY_MEETING_FIELDS = `
   }
 `;
 
+export const FULL_ONLY_MEETING_FIELDS = `
+${SENTENCE_FIELDS}`;
+
+export const SENTENCES_ONLY_MEETING_FIELDS = `
+  id
+${SENTENCE_FIELDS}`;
+
+export const GET_MEETING_FORMATS = ['json', 'markdown'];
+export const GET_MEETING_MODES = ['minimal', 'full', 'sentences-only'];
+
 export function buildGetMeetingQuery(mode = 'minimal') {
+  const fields = mode === 'sentences-only'
+    ? SENTENCES_ONLY_MEETING_FIELDS
+    : `${MINIMAL_MEETING_FIELDS}
+    ${mode === 'full' ? FULL_ONLY_MEETING_FIELDS : ''}`;
+
   return `query Transcript($transcriptId: String!) {
   transcript(id: $transcriptId) {
-    ${MINIMAL_MEETING_FIELDS}
-    ${mode === 'full' ? FULL_ONLY_MEETING_FIELDS : ''}
+    ${fields}
   }
 }`;
+}
+
+export function secondsToClock(seconds) {
+  const total = Math.max(0, Math.floor(Number(seconds) || 0));
+  const mins = String(Math.floor(total / 60)).padStart(2, '0');
+  const secs = String(total % 60).padStart(2, '0');
+  return `${mins}:${secs}`;
+}
+
+export function renderTranscriptMarkdown(meeting, options = {}) {
+  const sentences = Array.isArray(meeting?.sentences) ? meeting.sentences : [];
+
+  if (!sentences.length) {
+    return '_Keine Satzdaten verfügbar._';
+  }
+
+  const bracketed = options.bracketed !== false;
+
+  return sentences
+    .map((sentence) => {
+      const clock = secondsToClock(sentence.start_time);
+      const prefix = bracketed ? `[${clock}]` : clock;
+      const speaker = sentence.speaker_name ?? 'Unknown Speaker';
+      const text = sentence.text ?? sentence.raw_text ?? '';
+      return `#### ${prefix} ${speaker}\n${text}`;
+    })
+    .join('\n\n');
+}
+
+function rejectFlagValue(flag, value) {
+  if (value.startsWith('--')) {
+    throw new Error(`missing value for ${flag}`);
+  }
+}
+
+export function parseGetMeetingArgs(argv) {
+  const args = {
+    mode: 'minimal',
+    format: 'json',
+    sentencesOnly: false
+  };
+
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    const next = argv[i + 1];
+
+    if (!args.transcriptId && !arg.startsWith('--')) {
+      args.transcriptId = arg;
+    } else if (arg === '--mode' && next) {
+      rejectFlagValue(arg, next);
+      args.mode = next;
+      i += 1;
+    } else if (arg === '--format' && next) {
+      rejectFlagValue(arg, next);
+      args.format = next;
+      i += 1;
+    } else if (arg === '--output' && next) {
+      rejectFlagValue(arg, next);
+      args.output = next;
+      i += 1;
+    } else if (arg === '--sentences-only') {
+      args.sentencesOnly = true;
+    }
+  }
+
+  return args;
+}
+
+export function validateGetMeetingArgs(args) {
+  if (!args.transcriptId) {
+    throw new Error('usage: node get-meeting.mjs <transcriptId> [--mode minimal|full|sentences-only] [--format json|markdown] [--output <file>] [--sentences-only]');
+  }
+
+  if (!GET_MEETING_MODES.includes(args.mode)) {
+    throw new Error('mode_must_be_minimal_full_or_sentences_only');
+  }
+
+  if (!GET_MEETING_FORMATS.includes(args.format)) {
+    throw new Error('format_must_be_json_or_markdown');
+  }
+
+  return args;
 }
 
 export function buildListMeetingsRequest(options = {}, fields = LIST_MEETINGS_FIELDS) {
