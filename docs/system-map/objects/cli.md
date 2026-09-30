@@ -16,7 +16,7 @@ Dünne CLI-Skripte über dem gemeinsamen Client; jeder Aufruf ist ein JSON-Envel
 Skripte bleiben austauschbare Adapter; Argument-Parsing und Fehler-Semantik folgen einem gemeinsamen Muster.
 
 ## Shape
-`get-meeting.mjs` holt ein Meeting per `--mode minimal|full` (Fehler `mode_must_be_minimal_or_full`; Nutzungsfehler exit 2, API-Fehler exit 1). `get-meeting.mjs` gibt `{ok, mode, meeting}` aus; der Markdown-Renderpfad (`renderTranscriptMarkdown`) erzeugt timestamped Speaker-Dialog als Fallback auf `raw_text` — seit FFA-A-T2 zusätzlich über `--format markdown` und optionales `--output <file>` wählbar. `list-meetings.mjs` listet mit Pagination (limit 1–50, skip ≥ 0) und Optionalfiltern sowie `{ok, query, count, meetings}`. `list-channels.mjs` gibt `{ok, count, channels}` aus. `probe-meeting-capabilities.mjs` prüft read-only, welche Felder im Account befüllt sind, optional mit `--include-summary`. Alle Argument-Parser sind handgeschrieben ohne Dependencies; CLI-Argumentverhalten und Render-Helfer sind in `tests/` regressionsgepinnt.
+`get-meeting.mjs` holt ein Meeting per `--mode minimal|full` (Fehler `mode_must_be_minimal_or_full`; Nutzungsfehler exit 2, API-Fehler exit 1) und gibt `{ok, mode, meeting}` aus. `list-meetings.mjs` listet mit Pagination (limit 1–50, skip ≥ 0) und Optionalfiltern sowie `{ok, query, count, meetings}`. `list-channels.mjs` gibt `{ok, count, channels}` aus. `probe-meeting-capabilities.mjs` prüft read-only, welche Felder im Account befüllt sind, optional mit `--include-summary`. Alle Argument-Parser sind handgeschrieben ohne Dependencies.
 
 - [scripts/get-meeting.mjs](../../../scripts/get-meeting.mjs) — `scripts/get-meeting.mjs:1`
 - [scripts/list-meetings.mjs](../../../scripts/list-meetings.mjs) — `scripts/list-meetings.mjs:1`
@@ -32,7 +32,7 @@ Skripte bleiben austauschbare Adapter; Argument-Parsing und Fehler-Semantik folg
 - **Does not hit:** Auth-Resolvierung solange nur Konsumiert; meetings.json-Schema.
 
 ## Surfaces
-CLI-Aufrufe aus Workspace-Root (oder mit `WORKSPACE_ROOT`); stdout ist maschinenlesbarer JSON-Envelope, stderr tragen Fehler; bei `--output` landet der Inhalt in einer Datei bei unverändertem Envelope.
+CLI-Aufrufe aus Workspace-Root (oder mit `WORKSPACE_ROOT`); stdout ist maschinenlesbarer JSON-Envelope, stderr tragen Fehler.
 
 ## See
 Skriptverzeichnis und Modi: [SKILL.md](../../../SKILL.md). [Änderungsrouting](../effects/CONTEXT.md).
