@@ -6,7 +6,7 @@ description: Arbeite mit der Fireflies API für Meeting-Transkripte, Summaries, 
 # Fireflies API (SaaS-Adapter)
 
 > **Architektur-Rolle:** Technischer SaaS-Adapter für Fireflies.ai (GraphQL, Audio-Upload, Transkript-Abruf, Webhooks).  
-> **Workflow-Orchestrierung:** Die übergeordnete thematische Klassifikation, Evidenz-Ablage und Action-Item-Triage im Workspace wird durch **[`office-intelligence/meeting-desk`](file:///D:/users/dagobert/agents/skills/office-intelligence/skills/meeting-desk/SKILL.md)** gesteuert.
+> **Workflow-Orchestrierung:** Die übergeordnete thematische Klassifikation, Evidenz-Ablage und Action-Item-Triage im Workspace wird durch **[`office-intelligence/meeting-desk`](../office-intelligence/skills/meeting-desk/SKILL.md)** gesteuert.
 
 Nutze diesen Skill für direkte Fireflies-API-Operationen. Bevor du konkrete API-Operationen planst oder implementierst, hole dir den aktuellen Stand aus der offiziellen Doku.
 
