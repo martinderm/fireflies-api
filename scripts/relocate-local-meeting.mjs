@@ -323,14 +323,18 @@ function main() {
 
 const classicRelocateReady = Boolean(args.fromSlug && args.toSlug && args.toTitle && args.topicSlug && args.resolvedAt);
 
-if (!args.meetingId || (!args.toProject && !classicRelocateReady)) {
+if (args.toProject && classicRelocateReady) {
+  console.error(JSON.stringify({ ok: false, error: 'mutually_exclusive_flags:project_and_channel_relocation' }, null, 2));
+  process.exitCode = 2;
+} else if (!args.meetingId || (!args.toProject && !classicRelocateReady)) {
   console.error(JSON.stringify({ ok: false, error: 'usage: node relocate-local-meeting.mjs --meeting-id <id> (--to-project <slug> | --from-slug <slug> --to-slug <slug> --to-title <title> --topic-slug <slug> --resolved-at <iso>)' }, null, 2));
   process.exitCode = 2;
 } else {
   try {
     main();
   } catch (error) {
-    console.error(JSON.stringify({ ok: false, error: error?.message ?? 'unknown_error' }, null, 2));
-    process.exitCode = 1;
+    const message = error?.message ?? 'unknown_error';
+    console.error(JSON.stringify({ ok: false, error: message }, null, 2));
+    process.exitCode = message.startsWith('empty_project_slug') ? 2 : 1;
   }
 }

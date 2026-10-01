@@ -544,6 +544,9 @@ export function buildMeetingDestinationPaths(options = {}) {
 export function buildProjectRelocatePlan(meeting, options = {}) {
   const { projectSlug: rawProjectSlug, workspaceRoot } = options;
   const projectSlug = slugify(rawProjectSlug);
+  if (!projectSlug || projectSlug === 'ohne-channel') {
+    throw new Error(`empty_project_slug:${rawProjectSlug ?? ''}`);
+  }
   const channelSlug = meeting?.channel_slug || 'ohne-channel';
   const datePrefix = String(meeting?.dateString ?? '').slice(0, 10) || 'undated';
   const meetingSlug = meeting?.slug ?? '';

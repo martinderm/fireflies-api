@@ -317,6 +317,7 @@ Zusätzlich zu den inhaltlichen Meeting-Feldern sind diese Betriebsfelder wichti
   - boolesche Kennzeichnung, dass die Meeting-Dateien physisch im Projektbaum liegen (`memory/evidence/projects/<project_slug>/meetings/<channelSlug>/`)
   - gesetzt durch `sync --project-slug` bzw. `relocate --to-project` (nutzerexplizite Zielangabe, keine Klassifikation; `review_recommended` bleibt `true`, `llm_review_status` wird von `--to-project` nicht verändert)
   - `project_slugs` bedeutet bei projekt-scoped Einträgen „enthaltende Bäume“: bei einem Wechsel des Projektordners wird der bisherige `project_slug` daraus entfernt (keine Orphan-Referenzen)
+  - Layout-Split (bewusst): Der Projektbaum liegt immer unter `memory/evidence/projects/`, auch wenn ein Custom-`meetingsRoot` gesetzt ist; nur der Pool folgt dem Custom-Root (Dual-Evidence-fest)
 
 - `project_slugs`
   - optionale Liste zusätzlicher Projektzuordnungen, falls später mehr als ein Projekt dokumentiert werden soll

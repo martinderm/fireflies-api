@@ -49,7 +49,7 @@ function buildChannelStrategy() {
 }
 
 function parseArgs(argv) {
-  const args = { limit: 10, skip: 0, mode: 'new', refreshChanged: false, projectSlug: null };
+  const args = { limit: 10, skip: 0, mode: 'new', refreshChanged: false, projectSlug: null, projectSlugRaw: '' };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     const next = argv[i + 1];
@@ -71,9 +71,12 @@ function parseArgs(argv) {
     } else if (arg === '--context-channel-title' && next) {
       args.contextChannelTitle = next;
       i += 1;
-    } else if (arg === '--project-slug' && next) {
-      args.projectSlug = slugify(next);
-      i += 1;
+    } else if (arg === '--project-slug') {
+      args.projectSlugRaw = next ?? '';
+      args.projectSlug = next ? slugify(next) : null;
+      if (next !== undefined) {
+        i += 1;
+      }
     } else if (arg === '--refresh-changed') {
       args.refreshChanged = true;
     }
@@ -401,6 +404,16 @@ try {
   if (!['new', 'all'].includes(args.mode)) {
     exitCode = 2;
     throw new Error('mode_must_be_new_or_all');
+  }
+
+  if (!args.projectSlug || args.projectSlug === 'ohne-channel') {
+    exitCode = 2;
+    throw new Error(`empty_project_slug:${args.projectSlugRaw ?? ''}`);
+  }
+
+  if (args.projectSlugRaw && args.projectSlugRaw.startsWith('--')) {
+    exitCode = 2;
+    throw new Error('missing value for --project-slug');
   }
 
   const meetingsState = normalizeMeetingsState(readJson(meetingsJsonPath, null));

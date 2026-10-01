@@ -222,6 +222,7 @@ Aktuelle Skripte:
 - `sync-meetings-to-memory.mjs`
   - synchronisiert Meetings in `memory/evidence/meetings/` (mit Fallback auf `memory/references/meetings/`)
   - `--project-slug <slug>` sammelt meeting-Dateien direkt unter `memory/evidence/projects/<slug>/meetings/<channel>/` ab; `meetings.json` bleibt am Meetings-Root und vermerkt `project_slug`/`project_scoped` (Nutzer-Vormerkung, keine Klassifikation — `review_recommended` bleibt `true`)
+  - Der Projektbaum bleibt Dual-Evidence-fest an `workspaceRoot/memory/evidence/projects/` verdrahtet und folgt keinem Custom-`meetingsRoot` (nur der Pool folgt dem Custom-Root); leer-normalisierende Projekt-Slugs (z. B. `---`) werden fail-loud als `empty_project_slug` abgewiesen, statt den `ohne-channel`-Fallback zu erben
 - `probe-meeting-capabilities.mjs`
   - prüft für ein konkretes Meeting read-only, welche Felder/Artefakte im aktuellen Account/Plan tatsächlich befüllt oder gesperrt sind
   - Standard-Query fordert planabhängige Paid-Felder (`audio_url`, `video_url`, `analytics`) bewusst nicht an; `--include-paid-fields` fordert sie gezielt nach (auf einem Free-Plan bricht Fireflies die gesamte Query mit `paid_required` ab)
