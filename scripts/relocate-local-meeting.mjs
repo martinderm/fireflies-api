@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { resolveWorkspaceRoot } from './_fireflies-client.mjs';
+import { buildProjectRelocatePlan, slugify } from './_fireflies-meetings.mjs';
 
 const workspaceRoot = resolveWorkspaceRoot();
 
@@ -42,6 +43,9 @@ function parseArgs(argv) {
       i += 1;
     } else if (arg === '--resolved-at' && next) {
       args.resolvedAt = next;
+      i += 1;
+    } else if (arg === '--to-project' && next) {
+      args.toProject = slugify(next);
       i += 1;
     }
   }
@@ -99,15 +103,71 @@ function replaceAll(text, replacements) {
   return next;
 }
 
-function moveFile(fromPath, toPath) {
+function moveFile(fromPath, toPath, options = {}) {
+  const overwrite = options.overwrite !== false;
   ensureDir(path.dirname(toPath));
   if (!fs.existsSync(fromPath)) {
     throw new Error(`source_file_missing:${fromPath}`);
   }
   if (fs.existsSync(toPath)) {
+    if (!overwrite) {
+      throw new Error(`target_file_exists:${toPath}`);
+    }
     fs.unlinkSync(toPath);
   }
   fs.renameSync(fromPath, toPath);
+}
+
+function relocateToProject(state, meeting) {
+  const plan = buildProjectRelocatePlan(meeting, { projectSlug: args.toProject, workspaceRoot });
+  const summaryFrom = plan.fromPaths.summary;
+  const transcriptFrom = plan.fromPaths.transcript;
+  const summaryTo = plan.toPaths.summary;
+  const transcriptTo = plan.toPaths.transcript;
+
+  for (const targetPath of [summaryTo, transcriptTo]) {
+    if (fs.existsSync(targetPath)) {
+      throw new Error(`target_file_exists:${targetPath}`);
+    }
+  }
+
+  const summaryUpdated = updateFrontmatter(fs.readFileSync(summaryFrom, 'utf8'), plan.frontmatterUpdates);
+  const transcriptUpdated = updateFrontmatter(fs.readFileSync(transcriptFrom, 'utf8'), plan.frontmatterUpdates);
+
+  fs.writeFileSync(summaryFrom, summaryUpdated, 'utf8');
+  fs.writeFileSync(transcriptFrom, transcriptUpdated, 'utf8');
+  moveFile(summaryFrom, summaryTo, { overwrite: false });
+  moveFile(transcriptFrom, transcriptTo, { overwrite: false });
+
+  meeting.summary_path = plan.entryUpdates.summary_path;
+  meeting.transcript_path = plan.entryUpdates.transcript_path;
+  meeting.project_slug = plan.entryUpdates.project_slug;
+  meeting.project_slugs = plan.entryUpdates.project_slugs;
+  meeting.project_scoped = plan.entryUpdates.project_scoped;
+
+  if (meeting.review_input && typeof meeting.review_input === 'object') {
+    meeting.review_input.project_slug = plan.entryUpdates.review_input.project_slug;
+    meeting.review_input.project_scoped = plan.entryUpdates.review_input.project_scoped;
+  }
+
+  writeJson(meetingsJsonPath, state);
+
+  console.log(JSON.stringify({
+    ok: true,
+    meeting_id: meeting.meeting_id,
+    title: meeting.title,
+    project_slug: meeting.project_slug,
+    from: {
+      summary_path: plan.fromPaths.summary,
+      transcript_path: plan.fromPaths.transcript
+    },
+    to: {
+      summary_path: meeting.summary_path,
+      transcript_path: meeting.transcript_path,
+      project_slug: meeting.project_slug,
+      project_scoped: meeting.project_scoped
+    }
+  }, null, 2));
 }
 
 const args = parseArgs(process.argv.slice(2));
@@ -120,6 +180,11 @@ function main() {
   if (!meeting) {
     console.error(JSON.stringify({ ok: false, error: 'meeting_not_found', meeting_id: args.meetingId }, null, 2));
     process.exitCode = 1;
+    return;
+  }
+
+  if (args.toProject) {
+    relocateToProject(state, meeting);
     return;
   }
 
@@ -256,9 +321,16 @@ function main() {
   }, null, 2));
 }
 
-if (!args.meetingId || !args.fromSlug || !args.toSlug || !args.toTitle || !args.topicSlug || !args.resolvedAt) {
-  console.error(JSON.stringify({ ok: false, error: 'usage: node relocate-local-meeting.mjs --meeting-id <id> --from-slug <slug> --to-slug <slug> --to-title <title> --topic-slug <slug> --resolved-at <iso>' }, null, 2));
+const classicRelocateReady = Boolean(args.fromSlug && args.toSlug && args.toTitle && args.topicSlug && args.resolvedAt);
+
+if (!args.meetingId || (!args.toProject && !classicRelocateReady)) {
+  console.error(JSON.stringify({ ok: false, error: 'usage: node relocate-local-meeting.mjs --meeting-id <id> (--to-project <slug> | --from-slug <slug> --to-slug <slug> --to-title <title> --topic-slug <slug> --resolved-at <iso>)' }, null, 2));
   process.exitCode = 2;
 } else {
-  main();
+  try {
+    main();
+  } catch (error) {
+    console.error(JSON.stringify({ ok: false, error: error?.message ?? 'unknown_error' }, null, 2));
+    process.exitCode = 1;
+  }
 }

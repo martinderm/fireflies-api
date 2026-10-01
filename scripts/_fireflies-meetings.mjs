@@ -1,4 +1,19 @@
+import path from 'node:path';
 import { yamlString, yamlDurationMinutes } from './_yaml-helpers.mjs';
+
+function normalizeText(value) {
+  return String(value ?? '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+export function slugify(value) {
+  return normalizeText(value)
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-{2,}/g, '-') || 'ohne-channel';
+}
 
 export const LIST_MEETINGS_FIELDS = `
   id
@@ -494,4 +509,89 @@ export function buildListMeetingsRequest(options = {}, fields = LIST_MEETINGS_FI
 }`;
 
   return { query, variables };
+}
+
+function resolveProjectRoot(workspaceRoot, projectSlug) {
+  return path.join(workspaceRoot, 'memory', 'evidence', 'projects', projectSlug);
+}
+
+function relativeWorkspacePath(workspaceRoot, absolutePath) {
+  return path.relative(workspaceRoot, absolutePath).replace(/\\/g, '/');
+}
+
+export function buildMeetingDestinationPaths(options = {}) {
+  const {
+    meetingsRoot,
+    projectSlug = null,
+    channelSlug = null,
+    datePrefix = 'undated',
+    meetingSlug = '',
+    workspaceRoot = null
+  } = options;
+  const channelFolder = channelSlug || 'ohne-channel';
+  const root = workspaceRoot ?? path.resolve(meetingsRoot, '..', '..', '..');
+  const folderPath = projectSlug
+    ? path.join(resolveProjectRoot(root, projectSlug), 'meetings', channelFolder)
+    : path.join(meetingsRoot, channelFolder);
+
+  return {
+    folderPath,
+    summaryFileName: `${datePrefix}-${meetingSlug}.summary.md`,
+    transcriptFileName: `${datePrefix}-${meetingSlug}.transcript.md`
+  };
+}
+
+export function buildProjectRelocatePlan(meeting, options = {}) {
+  const { projectSlug: rawProjectSlug, workspaceRoot } = options;
+  const projectSlug = slugify(rawProjectSlug);
+  const channelSlug = meeting?.channel_slug || 'ohne-channel';
+  const datePrefix = String(meeting?.dateString ?? '').slice(0, 10) || 'undated';
+  const meetingSlug = meeting?.slug ?? '';
+  const destination = buildMeetingDestinationPaths({
+    meetingsRoot: path.join(workspaceRoot, 'memory', 'evidence', 'meetings'),
+    projectSlug,
+    channelSlug,
+    datePrefix,
+    meetingSlug,
+    workspaceRoot
+  });
+  const summaryToAbsolute = path.join(destination.folderPath, destination.summaryFileName);
+  const transcriptToAbsolute = path.join(destination.folderPath, destination.transcriptFileName);
+  const summaryFromAbsolute = meeting?.summary_path ? path.join(workspaceRoot, meeting.summary_path) : null;
+  const transcriptFromAbsolute = meeting?.transcript_path ? path.join(workspaceRoot, meeting.transcript_path) : null;
+  const summaryToRelative = relativeWorkspacePath(workspaceRoot, summaryToAbsolute);
+  const transcriptToRelative = relativeWorkspacePath(workspaceRoot, transcriptToAbsolute);
+  const previousProjectSlug = meeting?.project_slug ?? null;
+  const existingProjectSlugs = Array.isArray(meeting?.project_slugs) ? meeting.project_slugs : [];
+  const retainedProjectSlugs = previousProjectSlug && previousProjectSlug !== projectSlug
+    ? existingProjectSlugs.filter((slug) => slug !== previousProjectSlug)
+    : existingProjectSlugs;
+  const projectSlugs = [...new Set([...retainedProjectSlugs, projectSlug])];
+
+  return {
+    fromPaths: {
+      summary: summaryFromAbsolute,
+      transcript: transcriptFromAbsolute
+    },
+    toPaths: {
+      summary: summaryToAbsolute,
+      transcript: transcriptToAbsolute
+    },
+    frontmatterUpdates: {
+      project_slug: projectSlug,
+      summary_path: summaryToRelative,
+      transcript_path: transcriptToRelative
+    },
+    entryUpdates: {
+      project_slug: projectSlug,
+      project_slugs: projectSlugs,
+      project_scoped: true,
+      summary_path: summaryToRelative,
+      transcript_path: transcriptToRelative,
+      review_input: {
+        project_slug: projectSlug,
+        project_scoped: true
+      }
+    }
+  };
 }

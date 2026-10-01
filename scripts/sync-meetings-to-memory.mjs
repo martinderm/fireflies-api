@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { firefliesGraphQL, printError, printJson, loadSettingsJson, resolveWorkspaceRoot } from './_fireflies-client.mjs';
-import { LIST_MEETINGS_FIELDS, buildGetMeetingQuery, buildListMeetingsRequest, renderTranscriptMarkdown } from './_fireflies-meetings.mjs';
+import { LIST_MEETINGS_FIELDS, buildGetMeetingQuery, buildListMeetingsRequest, buildMeetingDestinationPaths, renderTranscriptMarkdown, slugify } from './_fireflies-meetings.mjs';
 import { yamlString, yamlScalar, yamlInline } from './_yaml-helpers.mjs';
 
 const workspaceRoot = resolveWorkspaceRoot();
@@ -49,7 +49,7 @@ function buildChannelStrategy() {
 }
 
 function parseArgs(argv) {
-  const args = { limit: 10, skip: 0, mode: 'new', refreshChanged: false };
+  const args = { limit: 10, skip: 0, mode: 'new', refreshChanged: false, projectSlug: null };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     const next = argv[i + 1];
@@ -70,6 +70,9 @@ function parseArgs(argv) {
       i += 1;
     } else if (arg === '--context-channel-title' && next) {
       args.contextChannelTitle = next;
+      i += 1;
+    } else if (arg === '--project-slug' && next) {
+      args.projectSlug = slugify(next);
       i += 1;
     } else if (arg === '--refresh-changed') {
       args.refreshChanged = true;
@@ -138,13 +141,6 @@ function normalizeText(value) {
     .normalize('NFKD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase();
-}
-
-function slugify(value) {
-  return normalizeText(value)
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .replace(/-{2,}/g, '-') || 'ohne-channel';
 }
 
 function stripCloudSuffix(title, suffix = CLOUD_TITLE_SUFFIX) {
@@ -360,7 +356,7 @@ function buildTranscriptMarkdown(meta, meeting) {
   return `${fm}# ${meeting.title} - Volltranskript\n\n## Metadaten\n- Meeting ID: ${meeting.id}\n- Datum: ${meeting.dateString ?? '-'}\n- Dauer: ${meeting.duration ?? '-'}\n- Channel: ${meta.channel ?? '-'}\n- Transcript URL: ${meeting.transcript_url ?? '-'}\n\n## Volltranskript\n\n${sentences}\n`;
 }
 
-function buildReviewInput(meeting, channelMapping, classified, channelTitle, channelSlug) {
+function buildReviewInput(meeting, channelMapping, classified, channelTitle, channelSlug, projectSlug) {
   return {
     source: 'sync-intake',
     title: meeting.title ?? null,
@@ -368,7 +364,8 @@ function buildReviewInput(meeting, channelMapping, classified, channelTitle, cha
     channel_slug: channelSlug,
     routing_mode: channelMapping?.routing_mode ?? null,
     keywords: meeting.summary?.keywords ?? [],
-    project_slug: null,
+    project_slug: projectSlug ?? null,
+    project_scoped: Boolean(projectSlug),
     topic_slug: null,
     classification_status: classified.classification_status,
     classification_confidence: classified.classification_confidence,
@@ -476,14 +473,27 @@ try {
     }
 
     const classified = classifyMeeting(localMeeting, channelMapping, channelSlug);
+    const targetProjectSlug = args.projectSlug ?? classified.project_slug;
+    const targetProjectSlugs = args.projectSlug
+      ? [...new Set([...(classified.project_slugs ?? []), args.projectSlug])]
+      : classified.project_slugs;
+    const projectScoped = Boolean(args.projectSlug);
 
     const datePrefix = String(localMeeting.dateString ?? '').slice(0, 10) || 'undated';
     const meetingSlug = slugify(localMeeting.title);
-    const folderPath = path.join(meetingsRoot, channelSlug);
+    const destination = buildMeetingDestinationPaths({
+      meetingsRoot,
+      projectSlug: args.projectSlug,
+      channelSlug,
+      datePrefix,
+      meetingSlug,
+      workspaceRoot
+    });
+    const folderPath = destination.folderPath;
     ensureDir(folderPath);
 
-    const summaryAbsPath = path.join(folderPath, `${datePrefix}-${meetingSlug}.summary.md`);
-    const transcriptAbsPath = path.join(folderPath, `${datePrefix}-${meetingSlug}.transcript.md`);
+    const summaryAbsPath = path.join(folderPath, destination.summaryFileName);
+    const transcriptAbsPath = path.join(folderPath, destination.transcriptFileName);
     const summaryPath = relativeWorkspacePath(summaryAbsPath);
     const transcriptPath = relativeWorkspacePath(transcriptAbsPath);
     const lastSyncedAt = new Date().toISOString();
@@ -500,7 +510,7 @@ try {
           : 'changed';
     const serverChanged = serverChangeStatus === 'changed';
 
-    const reviewInput = buildReviewInput(localMeeting, channelMapping, classified, channelTitle, channelSlug);
+    const reviewInput = buildReviewInput(localMeeting, channelMapping, classified, channelTitle, channelSlug, targetProjectSlug);
     const hadResolvedReview = existingEntry?.llm_review_status === 'resolved' || existingEntry?.llm_review_status === 'user-query';
     const shouldPendingReview = classified.review_recommended && (serverChangeStatus === 'new' || serverChangeStatus === 'changed' || !hadResolvedReview);
     const llmReviewStatus = shouldPendingReview
@@ -523,7 +533,7 @@ try {
       channel_slug: channelSlug,
       channel_id: firstChannel?.id ?? null,
       channels: listChannelTitles(localMeeting),
-      project_slug: classified.project_slug,
+      project_slug: targetProjectSlug,
       topic_slug: classified.topic_slug,
       classification_status: classified.classification_status,
       classification_confidence: classified.classification_confidence,
@@ -587,9 +597,10 @@ try {
       channel_slug: channelSlug,
       channel_id: firstChannel?.id ?? null,
       channels: meta.channels,
-      project_slug: classified.project_slug,
+      project_slug: targetProjectSlug,
       topic_slug: classified.topic_slug,
-      project_slugs: classified.project_slugs,
+      project_slugs: targetProjectSlugs,
+      project_scoped: projectScoped,
       topic_slugs: classified.topic_slugs,
       project_matches: classified.project_matches,
       topic_matches: classified.topic_matches,
@@ -646,9 +657,10 @@ try {
       meeting_id: meeting.id,
       title: localMeeting.title,
       channel_slug: channelSlug,
-      project_slug: classified.project_slug,
+      project_slug: targetProjectSlug,
+      project_scoped: projectScoped,
       topic_slug: classified.topic_slug,
-      project_slugs: classified.project_slugs,
+      project_slugs: targetProjectSlugs,
       topic_slugs: classified.topic_slugs,
       classification_status: classified.classification_status,
       classification_confidence: classified.classification_confidence,
@@ -674,6 +686,7 @@ try {
     mode: args.mode,
     refresh_changed: args.refreshChanged,
     meeting_id: args.meetingId ?? null,
+    project_slug: args.projectSlug ?? null,
     listed: listedMeetings.length,
     synced: processed.length,
     skipped_existing: args.mode === 'new' && !args.meetingId && !args.refreshChanged ? (listedMeetings.length - processed.length) : 0,
