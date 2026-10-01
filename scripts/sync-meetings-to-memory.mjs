@@ -407,20 +407,20 @@ function upsertMeeting(existingMeetings, entry) {
 }
 
 const args = parseArgs(process.argv.slice(2));
-
-if (Number.isNaN(args.limit) || args.limit < 1 || args.limit > 50) {
-  printError(new Error('limit_must_be_between_1_and_50'));
-  process.exit(2);
-}
-
-if (!['new', 'all'].includes(args.mode)) {
-  printError(new Error('mode_must_be_new_or_all'));
-  process.exit(2);
-}
-
 const detailQuery = buildGetMeetingQuery('full');
+let exitCode = 1;
 
 try {
+  if (Number.isNaN(args.limit) || args.limit < 1 || args.limit > 50) {
+    exitCode = 2;
+    throw new Error('limit_must_be_between_1_and_50');
+  }
+
+  if (!['new', 'all'].includes(args.mode)) {
+    exitCode = 2;
+    throw new Error('mode_must_be_new_or_all');
+  }
+
   const meetingsState = normalizeMeetingsState(readJson(meetingsJsonPath, null));
 
   const knownMeetingsById = new Map((meetingsState.meetings ?? []).map((meeting) => [meeting.meeting_id, meeting]));
@@ -697,5 +697,5 @@ try {
   });
 } catch (error) {
   printError(error);
-  process.exit(1);
+  process.exitCode = exitCode;
 }

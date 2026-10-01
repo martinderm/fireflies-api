@@ -7,30 +7,32 @@ try {
   args = validateGetMeetingArgs(parseGetMeetingArgs(process.argv.slice(2)));
 } catch (error) {
   printError(error);
-  process.exit(2);
+  process.exitCode = 2;
 }
 
-const mode = args.sentencesOnly ? 'sentences-only' : args.mode;
+if (args) {
+  const mode = args.sentencesOnly ? 'sentences-only' : args.mode;
 
-try {
-  const query = buildGetMeetingQuery(mode);
-  const data = await firefliesGraphQL({
-    query,
-    variables: { transcriptId: args.transcriptId }
-  });
+  try {
+    const query = buildGetMeetingQuery(mode);
+    const data = await firefliesGraphQL({
+      query,
+      variables: { transcriptId: args.transcriptId }
+    });
 
-  const meeting = data?.transcript ?? null;
-  const result = args.format === 'markdown'
-    ? renderTranscriptMarkdown(meeting)
-    : JSON.stringify({ ok: true, mode, meeting }, null, 2);
+    const meeting = data?.transcript ?? null;
+    const result = args.format === 'markdown'
+      ? renderTranscriptMarkdown(meeting)
+      : JSON.stringify({ ok: true, mode, meeting }, null, 2);
 
-  if (args.output) {
-    fs.writeFileSync(args.output, `${result}\n`, 'utf8');
-    printJson({ ok: true, mode, format: args.format, output: args.output });
-  } else {
-    process.stdout.write(`${result}\n`);
+    if (args.output) {
+      fs.writeFileSync(args.output, `${result}\n`, 'utf8');
+      printJson({ ok: true, mode, format: args.format, output: args.output });
+    } else {
+      process.stdout.write(`${result}\n`);
+    }
+  } catch (error) {
+    printError(error);
+    process.exitCode = 1;
   }
-} catch (error) {
-  printError(error);
-  process.exit(1);
 }

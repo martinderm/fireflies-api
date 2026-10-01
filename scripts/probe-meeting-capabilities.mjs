@@ -15,11 +15,7 @@ function parseArgs(argv) {
 }
 
 const { transcriptId, includeSummary } = parseArgs(process.argv.slice(2));
-
-if (!transcriptId) {
-  printError(new Error('usage: node probe-meeting-capabilities.mjs <transcriptId> [--include-summary]'));
-  process.exit(2);
-}
+let exitCode = 1;
 
 const query = `query ProbeMeeting($transcriptId: String!) {
   transcript(id: $transcriptId) {
@@ -58,6 +54,11 @@ const query = `query ProbeMeeting($transcriptId: String!) {
 }`;
 
 try {
+  if (!transcriptId) {
+    exitCode = 2;
+    throw new Error('usage: node probe-meeting-capabilities.mjs <transcriptId> [--include-summary]');
+  }
+
   const data = await firefliesGraphQL({ query, variables: { transcriptId } });
   const meeting = data?.transcript ?? null;
 
@@ -88,5 +89,5 @@ try {
   });
 } catch (error) {
   printError(error);
-  process.exit(1);
+  process.exitCode = exitCode;
 }

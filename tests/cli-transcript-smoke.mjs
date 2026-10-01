@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 import {
   SENTENCES_ONLY_MEETING_FIELDS,
@@ -155,4 +157,68 @@ test('validate: missing transcript id raises a usage error', () => {
     () => validateGetMeetingArgs({ mode: 'minimal', format: 'json', sentencesOnly: false }),
     /usage: node get-meeting\.mjs/
   );
+});
+
+test('resolve: markdown without an explicit mode defaults to sentences-only', () => {
+  const args = parseGetMeetingArgs(['abc123', '--format', 'markdown']);
+  assert.equal(args.modeExplicit, false);
+  assert.equal(args.mode, 'sentences-only');
+});
+
+test('resolve: explicit --mode minimal wins over the markdown auto default', () => {
+  const args = parseGetMeetingArgs(['abc123', '--format', 'markdown', '--mode', 'minimal']);
+  assert.equal(args.modeExplicit, true);
+  assert.equal(args.mode, 'minimal');
+});
+
+test('resolve: --sentences-only with markdown does not trigger the auto default', () => {
+  const args = parseGetMeetingArgs(['abc123', '--format', 'markdown', '--sentences-only']);
+  assert.equal(args.sentencesOnly, true);
+  assert.equal(args.mode, 'minimal');
+});
+
+test('resolve: explicit --mode full with markdown stays full', () => {
+  const args = parseGetMeetingArgs(['abc123', '--format', 'markdown', '--mode', 'full']);
+  assert.equal(args.mode, 'full');
+});
+
+test('resolve: json without an explicit mode stays minimal', () => {
+  const args = parseGetMeetingArgs(['abc123']);
+  assert.equal(args.mode, 'minimal');
+});
+
+test('parseArgs: an empty --output value is rejected as missing value', () => {
+  assert.throws(
+    () => parseGetMeetingArgs(['abc123', '--output', '']),
+    /missing value for --output/
+  );
+});
+
+test('parseArgs: a surplus positional argument is rejected fail-loud', () => {
+  assert.throws(
+    () => parseGetMeetingArgs(['abc123', 'surplus']),
+    /unexpected_positional_argument:surplus/
+  );
+});
+
+test('parseArgs: a single transcript id remains a valid call', () => {
+  const args = parseGetMeetingArgs(['abc123']);
+  assert.equal(args.transcriptId, 'abc123');
+});
+
+test('parseArgs: --sentences-only without a value remains valid next to a transcript id', () => {
+  const args = parseGetMeetingArgs(['abc123', '--sentences-only']);
+  assert.equal(args.sentencesOnly, true);
+});
+
+test('cli: get-meeting without arguments exits with usage code 2', () => {
+  const scriptPath = fileURLToPath(new URL('../scripts/get-meeting.mjs', import.meta.url));
+  const result = spawnSync(process.execPath, [scriptPath], { encoding: 'utf8' });
+  assert.equal(result.status, 2);
+});
+
+test('cli: get-meeting with an unknown format exits with usage code 2 before any API call', () => {
+  const scriptPath = fileURLToPath(new URL('../scripts/get-meeting.mjs', import.meta.url));
+  const result = spawnSync(process.execPath, [scriptPath, 'abc123', '--format', 'yaml'], { encoding: 'utf8' });
+  assert.equal(result.status, 2);
 });

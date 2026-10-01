@@ -45,18 +45,19 @@ function parseArgs(argv) {
 }
 
 const options = parseArgs(process.argv.slice(2));
-
-if (Number.isNaN(options.limit) || options.limit < 1 || options.limit > 50) {
-  printError(new Error('limit_must_be_between_1_and_50'));
-  process.exit(2);
-}
-
-if (Number.isNaN(options.skip) || options.skip < 0) {
-  printError(new Error('skip_must_be_zero_or_greater'));
-  process.exit(2);
-}
+let exitCode = 1;
 
 try {
+  if (Number.isNaN(options.limit) || options.limit < 1 || options.limit > 50) {
+    exitCode = 2;
+    throw new Error('limit_must_be_between_1_and_50');
+  }
+
+  if (Number.isNaN(options.skip) || options.skip < 0) {
+    exitCode = 2;
+    throw new Error('skip_must_be_zero_or_greater');
+  }
+
   const { query, variables } = buildListMeetingsRequest(options);
   const data = await firefliesGraphQL({ query, variables });
 
@@ -68,5 +69,5 @@ try {
   });
 } catch (error) {
   printError(error);
-  process.exit(1);
+  process.exitCode = exitCode;
 }

@@ -171,7 +171,7 @@ export function renderTranscriptMarkdown(meeting, options = {}) {
 }
 
 function rejectFlagValue(flag, value) {
-  if (value === undefined || value.startsWith('--')) {
+  if (value === undefined || value === '' || value.startsWith('--')) {
     throw new Error(`missing value for ${flag}`);
   }
 }
@@ -179,6 +179,7 @@ function rejectFlagValue(flag, value) {
 export function parseGetMeetingArgs(argv) {
   const args = {
     mode: 'minimal',
+    modeExplicit: false,
     format: 'json',
     sentencesOnly: false
   };
@@ -187,12 +188,16 @@ export function parseGetMeetingArgs(argv) {
     const arg = argv[i];
     const next = argv[i + 1];
 
-    if (!args.transcriptId && !arg.startsWith('--')) {
+    if (!arg.startsWith('--')) {
+      if (args.transcriptId !== undefined) {
+        throw new Error(`unexpected_positional_argument:${arg}`);
+      }
       args.transcriptId = arg;
     } else if (arg === '--mode' || arg === '--format' || arg === '--output') {
       rejectFlagValue(arg, next);
       if (arg === '--mode') {
         args.mode = next;
+        args.modeExplicit = true;
       } else if (arg === '--format') {
         args.format = next;
       } else {
@@ -202,6 +207,10 @@ export function parseGetMeetingArgs(argv) {
     } else if (arg === '--sentences-only') {
       args.sentencesOnly = true;
     }
+  }
+
+  if (args.format === 'markdown' && args.mode === 'minimal' && !args.modeExplicit && !args.sentencesOnly) {
+    args.mode = 'sentences-only';
   }
 
   return args;
