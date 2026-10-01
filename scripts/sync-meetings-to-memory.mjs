@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { firefliesGraphQL, printError, printJson, loadSettingsJson, resolveWorkspaceRoot } from './_fireflies-client.mjs';
 import { LIST_MEETINGS_FIELDS, buildGetMeetingQuery, buildListMeetingsRequest, renderTranscriptMarkdown } from './_fireflies-meetings.mjs';
+import { yamlString, yamlScalar, yamlInline } from './_yaml-helpers.mjs';
 
 const workspaceRoot = resolveWorkspaceRoot();
 const settings = loadSettingsJson();
@@ -174,22 +175,6 @@ async function maybeUpdateCloudTitle(meetingId, cloudTitle) {
     updated: true,
     title: data?.updateMeetingTitle?.title ?? desiredTitle
   };
-}
-
-function yamlString(value) {
-  if (value === null || value === undefined) return 'null';
-  return JSON.stringify(String(value));
-}
-
-function yamlScalar(value) {
-  if (value === null || value === undefined) return 'null';
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-  return yamlString(value);
-}
-
-function yamlInline(value, fallback = []) {
-  const resolved = value === null || value === undefined ? fallback : value;
-  return JSON.stringify(resolved);
 }
 
 function listSpeakerNames(meeting) {

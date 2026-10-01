@@ -1,3 +1,5 @@
+import { yamlString, yamlDurationMinutes } from './_yaml-helpers.mjs';
+
 export const LIST_MEETINGS_FIELDS = `
   id
   title
@@ -143,24 +145,83 @@ export function buildGetMeetingQuery(mode = 'minimal') {
 }`;
 }
 
+export function buildProbeQuery(includePaid = false, includeSummary = false) {
+  const lines = [
+    'query ProbeMeeting($transcriptId: String!) {',
+    '  transcript(id: $transcriptId) {',
+    '    id',
+    '    title',
+    '    transcript_url',
+    '    meeting_link',
+    '    organizer_email',
+    '    participants',
+    '    speakers { id name }',
+    '    meeting_attendees { displayName email phoneNumber name location }',
+    '    meeting_attendance { name join_time leave_time }',
+    '    channels { id title is_private }',
+    '    user { user_id email name is_admin integrations }',
+    '    meeting_info { fred_joined silent_meeting summary_status }',
+    '    shared_with { email name expires_at }',
+    '    apps_preview { outputs { transcript_id user_id app_id created_at title prompt response } }',
+    '    is_live'
+  ];
+
+  if (includePaid) {
+    lines.push('    audio_url', '    video_url', '    analytics { __typename }');
+  }
+
+  if (includeSummary) {
+    lines.push(
+      '    summary {',
+      '      keywords',
+      '      action_items',
+      '      outline',
+      '      shorthand_bullet',
+      '      overview',
+      '      bullet_gist',
+      '      gist',
+      '      short_summary',
+      '      short_overview',
+      '      meeting_type',
+      '      topics_discussed',
+      '    }'
+    );
+  }
+
+  lines.push('  }', '}');
+  return lines.join('\n');
+}
+
+export function buildProbeCapabilities(meeting, options = {}) {
+  const paidRequested = options.paidRequested === true;
+  const summaryRequested = options.summaryRequested === true;
+
+  return {
+    transcript_url: Boolean(meeting?.transcript_url),
+    meeting_link: Boolean(meeting?.meeting_link),
+    organizer_email: Boolean(meeting?.organizer_email),
+    participants_count: Array.isArray(meeting?.participants) ? meeting.participants.length : null,
+    speakers_count: Array.isArray(meeting?.speakers) ? meeting.speakers.length : null,
+    meeting_attendees_count: Array.isArray(meeting?.meeting_attendees) ? meeting.meeting_attendees.length : null,
+    meeting_attendance_count: Array.isArray(meeting?.meeting_attendance) ? meeting.meeting_attendance.length : null,
+    channels_count: Array.isArray(meeting?.channels) ? meeting.channels.length : null,
+    user_present: Boolean(meeting?.user),
+    meeting_info_present: Boolean(meeting?.meeting_info),
+    shared_with_count: Array.isArray(meeting?.shared_with) ? meeting.shared_with.length : null,
+    apps_preview_count: Array.isArray(meeting?.apps_preview?.outputs) ? meeting.apps_preview.outputs.length : null,
+    is_live: Boolean(meeting?.is_live),
+    audio_url_present: paidRequested ? Boolean(meeting?.audio_url) : null,
+    video_url_present: paidRequested ? Boolean(meeting?.video_url) : null,
+    analytics_present: paidRequested ? Boolean(meeting?.analytics) : null,
+    summary_present: summaryRequested ? Boolean(meeting?.summary) : null
+  };
+}
+
 export function secondsToClock(seconds) {
   const total = Math.max(0, Math.floor(Number(seconds) || 0));
   const mins = String(Math.floor(total / 60)).padStart(2, '0');
   const secs = String(total % 60).padStart(2, '0');
   return `${mins}:${secs}`;
-}
-
-function yamlString(value) {
-  if (value === null || value === undefined) return 'null';
-  return JSON.stringify(String(value));
-}
-
-function yamlDurationMinutes(value) {
-  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
-  if (typeof value === 'string' && value.trim() !== '' && Number.isFinite(Number(value))) {
-    return String(Number(value));
-  }
-  return 'null';
 }
 
 export function buildCliFrontmatter(meeting) {

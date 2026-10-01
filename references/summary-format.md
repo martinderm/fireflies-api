@@ -211,6 +211,38 @@ Wenn nur ein Transcript vorhanden ist und keine Fireflies-Summary mitgeliefert w
 - in `meetings.json` kenntlich machen, dass die Summary lokal erzeugt wurde
 - im `source`- oder Betriebskontext markieren, ob die Summary von Fireflies stammt oder lokal aus dem Transcript abgeleitet wurde
 
+## Transkript-Audit & Ergänzungen
+
+Der optionale Abschnitt `## Transkript-Audit & Ergänzungen` ist Bestandteil der Summary-Datei und wird angehängt, wenn der Abgleich der Fireflies-Summary gegen das Volltranskript Diskrepanzen oder Omissionen zeigt. Er ergänzt die Summary, ersetzt sie aber nicht. Der zugrunde liegende Audit folgt dem Summary-Audit-Standard in [`../SKILL.md`](../SKILL.md) (Abschnitt 9); umgekehrt verweist dieser Standard für das Ablageformat auf diesen Abschnitt.
+
+Wann anhängen:
+- erkannte Diskrepanzen zwischen Summary und Transkript
+- fehlende Kontexte, Timelines, Deadlines oder Dringlichkeit
+- verlorene negative Constraints oder Grenzen ("Niemals X", "Nicht anfassen Y")
+- zu stark verallgemeinerte technische oder UI-Entscheidungen
+- falsch attribuierte Action Items
+
+Was hinein:
+- fehlende Kontexte als Ergänzung
+- wiederhergestellte Grenzen und Verbote
+- Korrekturen der Aufgabenzuordnung
+- jeweils mit Zeitstempel- und/oder Sprecherbeleg aus dem Transkript
+
+Beispiel:
+
+```md
+## Transkript-Audit & Ergänzungen
+
+### Ergänzter Kontext
+- Bewerbungsdeadline und Dringlichkeit (04:12, Dr. Reis) fehlten in der Summary.
+
+### Wiederhergestellte Grenzen
+- KI-Tools dürfen lokale persönliche Verzeichnisse niemals berühren (18:40, Martin), nach früherem Datenvorfall.
+
+### Attributions-Korrektur
+- Portfolio-Redesign liegt bei Dr. Reis, nicht bei Martin (22:05, Dr. Reis).
+```
+
 ## Quelle
 
 - Beobachtete API-Antwort aus vorhandenem Fireflies-Meeting

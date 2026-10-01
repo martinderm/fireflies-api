@@ -11,6 +11,12 @@ import {
   validateGetMeetingArgs
 } from '../scripts/_fireflies-meetings.mjs';
 import * as meetings from '../scripts/_fireflies-meetings.mjs';
+import {
+  yamlString,
+  yamlScalar,
+  yamlInline,
+  yamlDurationMinutes
+} from '../scripts/_yaml-helpers.mjs';
 
 const MEETING = {
   sentences: [
@@ -419,4 +425,70 @@ test('cli: get-meeting with invalid --speaker-map json exits with usage code 2 b
   const result = spawnSync(process.execPath, [scriptPath, 'abc123', '--speaker-map', '{bad'], { encoding: 'utf8' });
   assert.equal(result.status, 2);
   assert.match(result.stderr, /invalid_speaker_map_json/);
+});
+
+test('yamlString: null and undefined render as bare null', () => {
+  assert.equal(yamlString(null), 'null');
+  assert.equal(yamlString(undefined), 'null');
+});
+
+test('yamlString: every other value is JSON-quoted as a string', () => {
+  assert.equal(yamlString('plain'), '"plain"');
+  assert.equal(yamlString('a"b'), '"a\\"b"');
+  assert.equal(yamlString('line\nbreak'), '"line\\nbreak"');
+  assert.equal(yamlString(25), '"25"');
+  assert.equal(yamlString(true), '"true"');
+});
+
+test('yamlScalar: null-ish render as bare null', () => {
+  assert.equal(yamlScalar(null), 'null');
+  assert.equal(yamlScalar(undefined), 'null');
+});
+
+test('yamlScalar: numbers and booleans render bare, strings stay quoted', () => {
+  assert.equal(yamlScalar(25), '25');
+  assert.equal(yamlScalar(1.5), '1.5');
+  assert.equal(yamlScalar(0), '0');
+  assert.equal(yamlScalar(true), 'true');
+  assert.equal(yamlScalar(false), 'false');
+  assert.equal(yamlScalar('plain'), '"plain"');
+});
+
+test('yamlInline: null and undefined fall back to an empty array', () => {
+  assert.equal(yamlInline(), '[]');
+  assert.equal(yamlInline(null), '[]');
+  assert.equal(yamlInline(undefined), '[]');
+});
+
+test('yamlInline: arrays and objects serialize as compact JSON', () => {
+  assert.equal(yamlInline(['a', 'b']), '["a","b"]');
+  assert.equal(yamlInline([1, 2]), '[1,2]');
+  assert.equal(yamlInline({ a: 1 }), '{"a":1}');
+});
+
+test('yamlInline: a caller-provided fallback replaces the empty-array default', () => {
+  assert.equal(yamlInline(null, ['z']), '["z"]');
+  assert.equal(yamlInline(undefined, ['z']), '["z"]');
+});
+
+test('yamlDurationMinutes: finite numbers render as plain minutes', () => {
+  assert.equal(yamlDurationMinutes(25), '25');
+  assert.equal(yamlDurationMinutes(25.5), '25.5');
+  assert.equal(yamlDurationMinutes(0), '0');
+});
+
+test('yamlDurationMinutes: numeric strings normalize and non-numeric strings render null', () => {
+  assert.equal(yamlDurationMinutes('25'), '25');
+  assert.equal(yamlDurationMinutes('25.50'), '25.5');
+  assert.equal(yamlDurationMinutes('0'), '0');
+  assert.equal(yamlDurationMinutes('abc'), 'null');
+  assert.equal(yamlDurationMinutes(''), 'null');
+  assert.equal(yamlDurationMinutes('   '), 'null');
+});
+
+test('yamlDurationMinutes: non-finite and null-ish values render null', () => {
+  assert.equal(yamlDurationMinutes(Number.NaN), 'null');
+  assert.equal(yamlDurationMinutes(Number.POSITIVE_INFINITY), 'null');
+  assert.equal(yamlDurationMinutes(null), 'null');
+  assert.equal(yamlDurationMinutes(undefined), 'null');
 });

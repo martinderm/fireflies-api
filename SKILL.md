@@ -223,6 +223,9 @@ Aktuelle Skripte:
   - synchronisiert Meetings in `memory/evidence/meetings/` (mit Fallback auf `memory/references/meetings/`)
 - `probe-meeting-capabilities.mjs`
   - prüft für ein konkretes Meeting read-only, welche Felder/Artefakte im aktuellen Account/Plan tatsächlich befüllt oder gesperrt sind
+  - Standard-Query fordert planabhängige Paid-Felder (`audio_url`, `video_url`, `analytics`) bewusst nicht an; `--include-paid-fields` fordert sie gezielt nach (auf einem Free-Plan bricht Fireflies die gesamte Query mit `paid_required` ab)
+  - nicht abgefragte Capabilities werden als `null` ("nicht abgefragt") ausgewiesen, statt `false` zu behaupten
+  - `--include-summary` fordert zusätzlich den Summary-Block an
   - Einsatz: kurze Capability-Checks, bevor neue Metadaten dauerhaft in den Sync übernommen werden
 - `relocate-local-meeting.mjs`
   - hängt ein bereits lokal gespiegeltes Meeting nur in `memory/evidence/meetings/` (oder `memory/references/meetings/`) um und zieht Frontmatter + `meetings.json` lokal nach
@@ -266,6 +269,26 @@ Regeln:
 - `llm_review_status` auf `resolved` setzen, wenn der Agent eine tragfähige Entscheidung getroffen hat.
 - `llm_review_status` auf `user-query` setzen, wenn noch eine Nutzerentscheidung oder Rückfrage offen ist.
 - Wenn neue Serveränderungen erkannt werden, darf ein zuvor gelöster Fall wieder auf `pending` zurückfallen.
+
+### 9) Summary-Audit-Standard für High-Stakes-Meetings
+
+Bei Meetings mit hohem Einsatz muss die Fireflies-Summary gegen das Volltranskript geprüft werden, bevor sie als Planungsgrundlage dient. Der Audit ist eine Arbeitsregel, keine optionale Empfehlung.
+
+Ein Transkript-Audit muss geprüft werden bei:
+- Client-Commitments oder zugesagten Lieferungen an Externe
+- Legal-, Tax- oder Compliance-Relevanz
+- High-Stakes-Entscheidungen mit schwer umkehrbaren Folgen
+- technischem Scoping, aus dem konkrete Architektur- oder UI-Entscheidungen abgeleitet werden
+
+4-Punkte-Checkliste:
+- [ ] Timelines & Urgency: Sind externe Deadlines und zeitlicher Druck vollständig erfasst?
+- [ ] Negative Constraints & Boundaries: Sind explizite Grenzen ("Niemals X", "Nicht anfassen Y") erhalten?
+- [ ] Technical & UI Specifics: Wurden Architekturentscheidungen nicht zu generischen Aussagen verallgemeinert?
+- [ ] Action Item Attribution: Ist jede Aufgabe dem tatsächlichen Sprecher bzw. Verantwortlichen zugeordnet?
+
+Dual-Evidence-Ablage:
+- Summary und Volltranskript bleiben als Paar erhalten (`<slug>.summary.md` und `<slug>.transcript.md`) unter `memory/evidence/meetings/` (Fallback `memory/references/meetings/`).
+- Erkennt der Audit Diskrepanzen oder Omissionen, wird der Summary-Datei der optionale Abschnitt `## Transkript-Audit & Ergänzungen` angehängt; Format, Auslöser und Beispielzeilen stehen in [`references/summary-format.md`](references/summary-format.md).
 
 ## Ausgabeprinzipien
 
