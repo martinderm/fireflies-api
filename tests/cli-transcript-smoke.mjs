@@ -10,6 +10,7 @@ import {
   renderTranscriptMarkdown,
   validateGetMeetingArgs
 } from '../scripts/_fireflies-meetings.mjs';
+import * as meetings from '../scripts/_fireflies-meetings.mjs';
 
 const MEETING = {
   sentences: [
@@ -221,4 +222,201 @@ test('cli: get-meeting with an unknown format exits with usage code 2 before any
   const scriptPath = fileURLToPath(new URL('../scripts/get-meeting.mjs', import.meta.url));
   const result = spawnSync(process.execPath, [scriptPath, 'abc123', '--format', 'yaml'], { encoding: 'utf8' });
   assert.equal(result.status, 2);
+});
+
+const FRONTMATTER_MEETING = {
+  id: '01M3PBHZZ610X593KYNF763Y40',
+  title: 'Website-Migration und kontrolliertes Deployment',
+  date: 1759156200000,
+  dateString: '2026-09-29T14:30:00.000Z',
+  duration: 25,
+  participants: ['Dr. Patrícia J. Reis', 'Martin'],
+  sentences: [
+    { index: 0, start_time: 80, speaker_id: '0', speaker_name: 'Speaker 0', text: 'Willkommen.', raw_text: 'willkommen' },
+    { index: 1, start_time: 3725, speaker_id: '1', speaker_name: 'Speaker 1', text: null, raw_text: 'Roh Fassung' }
+  ]
+};
+
+test('frontmatter: block is delimited, ordered and quote-safe', () => {
+  const fm = meetings.buildCliFrontmatter(FRONTMATTER_MEETING);
+  assert.ok(fm.startsWith('---\n'));
+  assert.ok(fm.endsWith('\n---'));
+  assert.ok(!fm.endsWith('\n---\n'));
+  assert.ok(fm.includes('id: "01M3PBHZZ610X593KYNF763Y40"'));
+  assert.ok(fm.includes('title: "Website-Migration und kontrolliertes Deployment"'));
+  assert.ok(fm.includes('date: "2026-09-29T14:30:00.000Z"'));
+  assert.ok(fm.includes('duration_minutes: 25'));
+  assert.ok(fm.includes('participants:\n  - "Dr. Patrícia J. Reis"\n  - "Martin"'));
+  assert.ok(fm.includes('source: "fireflies.ai"'));
+  assert.ok(fm.includes('type: "meeting-transcript"'));
+  const order = ['id:', 'title:', 'date:', 'duration_minutes:', 'participants:', 'source:', 'type:'];
+  const positions = order.map((key) => fm.indexOf(`\n${key}`));
+  assert.deepEqual(positions, [...positions].sort((a, b) => a - b));
+});
+
+test('frontmatter: missing metadata stays null or empty array and never invents values', () => {
+  const fm = meetings.buildCliFrontmatter({ sentences: [] });
+  assert.ok(fm.includes('id: null'));
+  assert.ok(fm.includes('title: null'));
+  assert.ok(fm.includes('date: null'));
+  assert.ok(fm.includes('duration_minutes: null'));
+  assert.ok(fm.includes('participants: []'));
+  assert.ok(fm.includes('source: "fireflies.ai"'));
+  assert.ok(fm.includes('type: "meeting-transcript"'));
+});
+
+test('frontmatter: date prefers dateString and falls back to date', () => {
+  const preferred = meetings.buildCliFrontmatter({ date: 1, dateString: '2026-09-29T14:30:00.000Z' });
+  assert.ok(preferred.includes('date: "2026-09-29T14:30:00.000Z"'));
+  const fallback = meetings.buildCliFrontmatter({ date: '2026-01-02T00:00:00.000Z', dateString: null });
+  assert.ok(fallback.includes('date: "2026-01-02T00:00:00.000Z"'));
+});
+
+test('frontmatter: render option prepends the block and keeps the body intact', () => {
+  const body = renderTranscriptMarkdown(FRONTMATTER_MEETING);
+  const rendered = renderTranscriptMarkdown(FRONTMATTER_MEETING, { withFrontmatter: true });
+  assert.equal(rendered, `${meetings.buildCliFrontmatter(FRONTMATTER_MEETING)}\n\n${body}`);
+  assert.ok(rendered.includes('\n---\n\n#### [01:20]'));
+  assert.ok(rendered.endsWith(body));
+});
+
+test('frontmatter: render option also prepends when no sentences are available', () => {
+  const rendered = renderTranscriptMarkdown({}, { withFrontmatter: true });
+  assert.ok(rendered.startsWith('---\n'));
+  assert.ok(rendered.endsWith('\n\n_Keine Satzdaten verfügbar._'));
+});
+
+test('parseArgs: --with-frontmatter defaults to false and is captured when present', () => {
+  assert.equal(parseGetMeetingArgs(['abc123']).withFrontmatter, false);
+  assert.equal(parseGetMeetingArgs(['abc123', '--with-frontmatter']).withFrontmatter, true);
+});
+
+test('validate: --with-frontmatter with json format fails loud before any API call', () => {
+  assert.throws(
+    () => validateGetMeetingArgs({ transcriptId: 'abc123', mode: 'minimal', format: 'json', sentencesOnly: false, withFrontmatter: true }),
+    /frontmatter_requires_markdown_format/
+  );
+  assert.doesNotThrow(
+    () => validateGetMeetingArgs({ transcriptId: 'abc123', mode: 'minimal', format: 'markdown', sentencesOnly: false, withFrontmatter: true })
+  );
+});
+
+test('cli: get-meeting with --with-frontmatter on the default json format exits with code 2', () => {
+  const scriptPath = fileURLToPath(new URL('../scripts/get-meeting.mjs', import.meta.url));
+  const result = spawnSync(process.execPath, [scriptPath, 'abc123', '--with-frontmatter'], { encoding: 'utf8' });
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /frontmatter_requires_markdown_format/);
+});
+
+test('resolve: markdown with --with-frontmatter upgrades the auto sentences-only default to full', () => {
+  const args = parseGetMeetingArgs(['abc123', '--format', 'markdown', '--with-frontmatter']);
+  assert.equal(args.mode, 'sentences-only');
+  assert.equal(meetings.resolveGetMeetingMode(args), 'full');
+  const query = buildGetMeetingQuery(meetings.resolveGetMeetingMode(args));
+  assert.ok(query.includes('summary'));
+  assert.ok(query.includes('sentences'));
+});
+
+test('resolve: explicit --sentences-only flag is upgraded by --with-frontmatter to full', () => {
+  const args = parseGetMeetingArgs(['abc123', '--format', 'markdown', '--sentences-only', '--with-frontmatter']);
+  assert.equal(meetings.resolveGetMeetingMode(args), 'full');
+});
+
+test('resolve: an explicit --mode always wins over the --with-frontmatter cascade', () => {
+  const minimal = parseGetMeetingArgs(['abc123', '--format', 'markdown', '--with-frontmatter', '--mode', 'minimal']);
+  assert.equal(minimal.modeExplicit, true);
+  assert.equal(meetings.resolveGetMeetingMode(minimal), 'minimal');
+  const full = parseGetMeetingArgs(['abc123', '--format', 'markdown', '--with-frontmatter', '--mode', 'full']);
+  assert.equal(meetings.resolveGetMeetingMode(full), 'full');
+});
+
+test('resolve: without --with-frontmatter the markdown auto default stays sentences-only', () => {
+  const args = parseGetMeetingArgs(['abc123', '--format', 'markdown']);
+  assert.equal(meetings.resolveGetMeetingMode(args), 'sentences-only');
+});
+
+test('parseSpeakerMap: comma-delimited key=value pairs map ids and names', () => {
+  const map = meetings.parseSpeakerMap('0=Dr. X,1=Martin');
+  assert.equal(map.byId.get('0'), 'Dr. X');
+  assert.equal(map.byId.get('1'), 'Martin');
+  assert.equal(map.byName.get('0'), 'Dr. X');
+});
+
+test('parseSpeakerMap: Speaker-prefixed keys normalize into both byId and byName', () => {
+  const map = meetings.parseSpeakerMap('Speaker 0=Dr. X,Speaker 1=Martin');
+  assert.equal(map.byId.get('0'), 'Dr. X');
+  assert.equal(map.byId.get('1'), 'Martin');
+  assert.equal(map.byName.get('Speaker 0'), 'Dr. X');
+});
+
+test('parseSpeakerMap: a JSON mapping object is accepted', () => {
+  const map = meetings.parseSpeakerMap('{"0":"Dr. X","1":"Martin"}');
+  assert.equal(map.byId.get('0'), 'Dr. X');
+  assert.equal(map.byId.get('1'), 'Martin');
+});
+
+test('parseSpeakerMap: malformed JSON fails loud with invalid_speaker_map_json', () => {
+  assert.throws(() => meetings.parseSpeakerMap('{not valid json'), /invalid_speaker_map_json/);
+});
+
+test('parseSpeakerMap: an empty mapping target fails loud', () => {
+  assert.throws(() => meetings.parseSpeakerMap('0='), /speaker_map_empty_value/);
+  assert.throws(() => meetings.parseSpeakerMap('{"0":""}'), /speaker_map_empty_value/);
+});
+
+test('render: speakerMap resolves speaker_id before speaker_name', () => {
+  const map = meetings.parseSpeakerMap('0=By Id,Speaker 0=By Name');
+  const markdown = renderTranscriptMarkdown(
+    { sentences: [{ start_time: 80, speaker_id: '0', speaker_name: 'Speaker 0', text: 'Hallo' }] },
+    { speakerMap: map }
+  );
+  assert.equal(markdown, '#### [01:20] By Id\nHallo');
+});
+
+test('render: speakerMap falls back to a full speaker_name match when the id is unmapped', () => {
+  const map = meetings.parseSpeakerMap('0=By Id,Speaker 0=By Name');
+  const markdown = renderTranscriptMarkdown(
+    { sentences: [{ start_time: 80, speaker_id: '9', speaker_name: 'Speaker 0', text: 'Hallo' }] },
+    { speakerMap: map }
+  );
+  assert.equal(markdown, '#### [01:20] By Name\nHallo');
+});
+
+test('render: speakerMap falls back to the original label when nothing matches', () => {
+  const map = meetings.parseSpeakerMap('0=By Id');
+  const markdown = renderTranscriptMarkdown(
+    { sentences: [{ start_time: 80, speaker_id: '9', speaker_name: 'Martin', text: 'Hallo' }] },
+    { speakerMap: map }
+  );
+  assert.equal(markdown, '#### [01:20] Martin\nHallo');
+});
+
+test('render: speakerMap keeps the Unknown Speaker fallback for null speaker_name', () => {
+  const map = meetings.parseSpeakerMap('0=By Id');
+  const markdown = renderTranscriptMarkdown(
+    { sentences: [{ start_time: 5, speaker_id: null, speaker_name: null, text: 'Hallo' }] },
+    { speakerMap: map }
+  );
+  assert.equal(markdown, '#### [00:05] Unknown Speaker\nHallo');
+});
+
+test('render: speakerMap integrates with bracketed true and false output', () => {
+  const map = meetings.parseSpeakerMap('0=Dr. X');
+  const meeting = { sentences: [{ start_time: 80, speaker_id: '0', speaker_name: 'Speaker 0', text: 'Hallo' }] };
+  assert.equal(renderTranscriptMarkdown(meeting, { speakerMap: map }), '#### [01:20] Dr. X\nHallo');
+  assert.equal(renderTranscriptMarkdown(meeting, { speakerMap: map, bracketed: false }), '#### 01:20 Dr. X\nHallo');
+});
+
+test('parseArgs: --speaker-map captures its value and rejects a swallowed flag', () => {
+  const args = parseGetMeetingArgs(['abc123', '--speaker-map', '0=Dr. X']);
+  assert.equal(args.speakerMap, '0=Dr. X');
+  assert.throws(() => parseGetMeetingArgs(['abc123', '--speaker-map', '--format']), /missing value for --speaker-map/);
+  assert.throws(() => parseGetMeetingArgs(['abc123', '--speaker-map']), /missing value for --speaker-map/);
+});
+
+test('cli: get-meeting with invalid --speaker-map json exits with usage code 2 before any API call', () => {
+  const scriptPath = fileURLToPath(new URL('../scripts/get-meeting.mjs', import.meta.url));
+  const result = spawnSync(process.execPath, [scriptPath, 'abc123', '--speaker-map', '{bad'], { encoding: 'utf8' });
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /invalid_speaker_map_json/);
 });

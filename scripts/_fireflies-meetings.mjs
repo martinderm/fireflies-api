@@ -150,24 +150,71 @@ export function secondsToClock(seconds) {
   return `${mins}:${secs}`;
 }
 
+function yamlString(value) {
+  if (value === null || value === undefined) return 'null';
+  return JSON.stringify(String(value));
+}
+
+function yamlDurationMinutes(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  if (typeof value === 'string' && value.trim() !== '' && Number.isFinite(Number(value))) {
+    return String(Number(value));
+  }
+  return 'null';
+}
+
+export function buildCliFrontmatter(meeting) {
+  const participants = Array.isArray(meeting?.participants)
+    ? meeting.participants.filter((participant) => typeof participant === 'string')
+    : [];
+  const participantLines = participants.length
+    ? ['participants:', ...participants.map((participant) => `  - ${yamlString(participant)}`)]
+    : ['participants: []'];
+  const date = meeting?.dateString ?? meeting?.date ?? null;
+
+  return [
+    '---',
+    `id: ${yamlString(meeting?.id ?? null)}`,
+    `title: ${yamlString(meeting?.title ?? null)}`,
+    `date: ${yamlString(date)}`,
+    `duration_minutes: ${yamlDurationMinutes(meeting?.duration)}`,
+    ...participantLines,
+    `source: ${yamlString('fireflies.ai')}`,
+    `type: ${yamlString('meeting-transcript')}`,
+    '---'
+  ].join('\n');
+}
+
+function resolveSpeakerLabel(sentence, speakerMap) {
+  const fallback = sentence.speaker_name ?? 'Unknown Speaker';
+  if (!speakerMap) return fallback;
+  const id = sentence.speaker_id === null || sentence.speaker_id === undefined
+    ? null
+    : String(sentence.speaker_id);
+  if (id !== null && speakerMap.byId.has(id)) return speakerMap.byId.get(id);
+  const name = sentence.speaker_name === null || sentence.speaker_name === undefined
+    ? null
+    : sentence.speaker_name;
+  if (name !== null && speakerMap.byName.has(name)) return speakerMap.byName.get(name);
+  return fallback;
+}
+
 export function renderTranscriptMarkdown(meeting, options = {}) {
   const sentences = Array.isArray(meeting?.sentences) ? meeting.sentences : [];
-
-  if (!sentences.length) {
-    return '_Keine Satzdaten verfügbar._';
-  }
-
   const bracketed = options.bracketed !== false;
+  const body = sentences.length
+    ? sentences
+      .map((sentence) => {
+        const clock = secondsToClock(sentence.start_time);
+        const prefix = bracketed ? `[${clock}]` : clock;
+        const speaker = resolveSpeakerLabel(sentence, options.speakerMap);
+        const text = sentence.text ?? sentence.raw_text ?? '';
+        return `#### ${prefix} ${speaker}\n${text}`;
+      })
+      .join('\n\n')
+    : '_Keine Satzdaten verfügbar._';
 
-  return sentences
-    .map((sentence) => {
-      const clock = secondsToClock(sentence.start_time);
-      const prefix = bracketed ? `[${clock}]` : clock;
-      const speaker = sentence.speaker_name ?? 'Unknown Speaker';
-      const text = sentence.text ?? sentence.raw_text ?? '';
-      return `#### ${prefix} ${speaker}\n${text}`;
-    })
-    .join('\n\n');
+  return options.withFrontmatter ? `${buildCliFrontmatter(meeting)}\n\n${body}` : body;
 }
 
 function rejectFlagValue(flag, value) {
@@ -176,12 +223,76 @@ function rejectFlagValue(flag, value) {
   }
 }
 
+export function parseSpeakerMap(raw) {
+  const text = String(raw ?? '').trim();
+  const entries = [];
+
+  if (text.startsWith('{')) {
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      throw new Error('invalid_speaker_map_json');
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('invalid_speaker_map_json');
+    }
+    for (const [key, value] of Object.entries(parsed)) {
+      entries.push([key, value]);
+    }
+  } else {
+    for (const pair of text.split(',')) {
+      const trimmed = pair.trim();
+      if (!trimmed) continue;
+      const separator = trimmed.indexOf('=');
+      if (separator === -1) {
+        throw new Error('invalid_speaker_map_entry');
+      }
+      entries.push([trimmed.slice(0, separator), trimmed.slice(separator + 1)]);
+    }
+  }
+
+  const byId = new Map();
+  const byName = new Map();
+  const resolved = [];
+
+  for (const [rawKey, rawValue] of entries) {
+    const key = String(rawKey).trim();
+    const value = rawValue === null || rawValue === undefined || typeof rawValue === 'object'
+      ? ''
+      : String(rawValue).trim();
+    if (!key) continue;
+    if (!value) {
+      throw new Error('speaker_map_empty_value');
+    }
+    byName.set(key, value);
+    resolved.push([key, value]);
+  }
+
+  for (const [key, value] of resolved) {
+    const numeric = key.match(/^\d+$/);
+    if (numeric) {
+      byId.set(numeric[0], value);
+    }
+  }
+
+  for (const [key, value] of resolved) {
+    const speaker = key.match(/^speaker\s+(\d+)$/i);
+    if (speaker && !byId.has(speaker[1])) {
+      byId.set(speaker[1], value);
+    }
+  }
+
+  return { byId, byName };
+}
+
 export function parseGetMeetingArgs(argv) {
   const args = {
     mode: 'minimal',
     modeExplicit: false,
     format: 'json',
-    sentencesOnly: false
+    sentencesOnly: false,
+    withFrontmatter: false
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -193,19 +304,23 @@ export function parseGetMeetingArgs(argv) {
         throw new Error(`unexpected_positional_argument:${arg}`);
       }
       args.transcriptId = arg;
-    } else if (arg === '--mode' || arg === '--format' || arg === '--output') {
+    } else if (arg === '--mode' || arg === '--format' || arg === '--output' || arg === '--speaker-map') {
       rejectFlagValue(arg, next);
       if (arg === '--mode') {
         args.mode = next;
         args.modeExplicit = true;
       } else if (arg === '--format') {
         args.format = next;
-      } else {
+      } else if (arg === '--output') {
         args.output = next;
+      } else {
+        args.speakerMap = next;
       }
       i += 1;
     } else if (arg === '--sentences-only') {
       args.sentencesOnly = true;
+    } else if (arg === '--with-frontmatter') {
+      args.withFrontmatter = true;
     }
   }
 
@@ -214,6 +329,14 @@ export function parseGetMeetingArgs(argv) {
   }
 
   return args;
+}
+
+export function resolveGetMeetingMode(args) {
+  const effective = args.sentencesOnly ? 'sentences-only' : args.mode;
+  if (args.withFrontmatter && !args.modeExplicit && effective === 'sentences-only') {
+    return 'full';
+  }
+  return effective;
 }
 
 export function validateGetMeetingArgs(args) {
@@ -227,6 +350,10 @@ export function validateGetMeetingArgs(args) {
 
   if (!GET_MEETING_FORMATS.includes(args.format)) {
     throw new Error('format_must_be_json_or_markdown');
+  }
+
+  if (args.withFrontmatter && args.format !== 'markdown') {
+    throw new Error('frontmatter_requires_markdown_format');
   }
 
   return args;

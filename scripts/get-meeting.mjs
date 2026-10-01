@@ -1,17 +1,20 @@
 import fs from 'node:fs';
 import { firefliesGraphQL, printError, printJson } from './_fireflies-client.mjs';
-import { buildGetMeetingQuery, parseGetMeetingArgs, renderTranscriptMarkdown, validateGetMeetingArgs } from './_fireflies-meetings.mjs';
+import { buildGetMeetingQuery, parseGetMeetingArgs, parseSpeakerMap, renderTranscriptMarkdown, resolveGetMeetingMode, validateGetMeetingArgs } from './_fireflies-meetings.mjs';
 
 let args;
+let speakerMap;
 try {
-  args = validateGetMeetingArgs(parseGetMeetingArgs(process.argv.slice(2)));
+  const parsedArgs = validateGetMeetingArgs(parseGetMeetingArgs(process.argv.slice(2)));
+  speakerMap = parsedArgs.speakerMap ? parseSpeakerMap(parsedArgs.speakerMap) : undefined;
+  args = parsedArgs;
 } catch (error) {
   printError(error);
   process.exitCode = 2;
 }
 
 if (args) {
-  const mode = args.sentencesOnly ? 'sentences-only' : args.mode;
+  const mode = resolveGetMeetingMode(args);
 
   try {
     const query = buildGetMeetingQuery(mode);
@@ -22,7 +25,7 @@ if (args) {
 
     const meeting = data?.transcript ?? null;
     const result = args.format === 'markdown'
-      ? renderTranscriptMarkdown(meeting)
+      ? renderTranscriptMarkdown(meeting, { speakerMap, withFrontmatter: args.withFrontmatter })
       : JSON.stringify({ ok: true, mode, meeting }, null, 2);
 
     if (args.output) {
