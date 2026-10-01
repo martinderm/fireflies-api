@@ -4,7 +4,7 @@ universe: live
 status: verified
 entity: scripts/sync-meetings-to-memory.mjs
 verified_at: 2026-10-01
-revision: 1bd06b63435a9dc3a50555e509d5853bd4667781
+revision: 3a974a362c24202ad44dc2cf3051928553521bce
 consumes: [../objects/sync.md, ../objects/meetings-schema.md, ../objects/client.md]
 produces: [../objects/skill-behavior.md]
 ---

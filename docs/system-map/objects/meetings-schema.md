@@ -5,7 +5,7 @@ universe: live
 status: verified
 entity: scripts/_fireflies-meetings.mjs
 verified_at: 2026-10-01
-revision: 1bd06b63435a9dc3a50555e509d5853bd4667781
+revision: 3a974a362c24202ad44dc2cf3051928553521bce
 ---
 
 # Meetings-Schema
@@ -13,7 +13,7 @@ revision: 1bd06b63435a9dc3a50555e509d5853bd4667781
 Gemeinsame GraphQL-Feldkataloge und Query-Builder für Transcript- und Transcripts-Queries.
 
 ## Why this shape
-Feldkataloge werden geteilt statt pro Skript kopiert; Query-Aufbau ist reine Funktion ohne I/O. Die lokalen YAML-Helfer (`yamlString`, `yamlDurationMinutes` in diesem Modul) duplizieren bewusst die `yamlString`-Konvention aus [scripts/sync-meetings-to-memory.mjs](../../../scripts/sync-meetings-to-memory.mjs): Der Sync-Skriptpfad war in der Feature-Runde (Batch C, Issue #7) bewusst tabu, eine Extraktion ohne gleichzeitige Sync-Anpassung hätte die Duplikation nicht reduziert. Konsolidierung in ein gemeinsames Modul ist als GitHub Issue #10 nachverfolgt.
+Feldkataloge werden geteilt statt pro Skript kopiert; Query-Aufbau ist reine Funktion ohne I/O. YAML-Helfer (`yamlString`, `yamlScalar`, `yamlInline`, `yamlDurationMinutes`) leben seit Issue #10 gemeinsam in [scripts/_yaml-helpers.mjs](../../../scripts/_yaml-helpers.mjs) und werden von Sync und CLI-Frontmatter importiert; die Byte-Identität der Frontmatter-Ausgaben vor/nach der Konsolidierung ist als Run-Nachweis belegt.
 
 ## Shape
 `LIST_MEETINGS_FIELDS` ist das schlanke Listenfeldkatalog-Set (id, title, date, dateString, duration, transcript_url, organizer_email, host_email, channels). `MINIMAL_MEETING_FIELDS` umfasst zusätzlich Teilnehmer, Speakers, Attendance, User, meeting_info, das volle `summary`-Objekt, shared_with und apps_preview. Der gemeinsame `SENTENCE_FIELDS`-Kern wird von `FULL_ONLY_MEETING_FIELDS` (inkl. `ai_filters`) und `SENTENCES_ONLY_MEETING_FIELDS` (nur `id` + Sentences) komponiert. `GET_MEETING_FORMATS` und `GET_MEETING_MODES` sind die geschlossenen Validierungslisten (`json|markdown`, `minimal|full|sentences-only`). `buildGetMeetingQuery` bettet Sentences nur in den `full`- und `sentences-only`-Modi ein; `secondsToClock`, `renderTranscriptMarkdown(meeting, {bracketed})`, `parseGetMeetingArgs` und `validateGetMeetingArgs` sind die exportierten reinen Render-/Parser-Helfer (Parser wirft `missing value for <flag>` bei `--`-beginnenden Flag-Werten). `buildListMeetingsRequest` erlaubt Keyword/Scope, fromDate/toDate, limit/skip, host_email, user_id, channel_id und schlägt bei `scope` ohne `keyword` mit `scope_requires_keyword` fehl; `scope` wird inline (nicht als Variable) eingebaut.
