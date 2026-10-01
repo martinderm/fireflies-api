@@ -217,6 +217,8 @@ Aktuelle Skripte:
   - `--format markdown` rendert den Speaker-Dialog als Markdown (`[mm:ss] Speaker`), `--output <file>` schreibt das Ergebnis in eine Datei (stdout bleibt kurzer Bestätigungs-Envelope)
   - `--format markdown` wählt ohne explizites `--mode` automatisch den sentences-only-Modus; ein explizites `--mode` gewinnt
   - `--sentences-only` fragt nur die Sentence-Felder ab (kein summary/minimal-Ballast)
+  - `--with-frontmatter` prepended einen schlanken YAML-Frontmatter-Block (id, title, date, duration_minutes, participants, source, type) — nur mit `--format markdown`; der effektive sentences-only-Modus wird dafür automatisch auf `full` angehoben (explizites `--mode` gewinnt)
+  - `--speaker-map "0=Dr. X,1=Martin"` (oder JSON) mapped Speaker-IDs/Namen im Markdown-Export; unbekannte Speaker behalten ihr Original-Label
 - `sync-meetings-to-memory.mjs`
   - synchronisiert Meetings in `memory/evidence/meetings/` (mit Fallback auf `memory/references/meetings/`)
 - `probe-meeting-capabilities.mjs`

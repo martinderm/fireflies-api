@@ -5,7 +5,7 @@ universe: live
 status: verified
 entity: scripts/_fireflies-client.mjs
 verified_at: 2026-10-01
-revision: 03fa8e73ec212263aa41accde6391b683d05f01b
+revision: 1bd06b63435a9dc3a50555e509d5853bd4667781
 ---
 
 # Client
