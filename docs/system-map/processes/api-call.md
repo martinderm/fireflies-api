@@ -4,7 +4,7 @@ universe: live
 status: verified
 entity: scripts/_fireflies-client.mjs
 verified_at: 2026-10-01
-revision: 3a974a362c24202ad44dc2cf3051928553521bce
+revision: 2ae1f0d668dc1eaebab409853e95e23b26cbe02c
 consumes: [../objects/client.md]
 produces: [../objects/cli.md, ../objects/sync.md]
 ---

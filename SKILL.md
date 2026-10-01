@@ -221,6 +221,7 @@ Aktuelle Skripte:
   - `--speaker-map "0=Dr. X,1=Martin"` (oder JSON) mapped Speaker-IDs/Namen im Markdown-Export; unbekannte Speaker behalten ihr Original-Label
 - `sync-meetings-to-memory.mjs`
   - synchronisiert Meetings in `memory/evidence/meetings/` (mit Fallback auf `memory/references/meetings/`)
+  - `--project-slug <slug>` sammelt meeting-Dateien direkt unter `memory/evidence/projects/<slug>/meetings/<channel>/` ab; `meetings.json` bleibt am Meetings-Root und vermerkt `project_slug`/`project_scoped` (Nutzer-Vormerkung, keine Klassifikation — `review_recommended` bleibt `true`)
 - `probe-meeting-capabilities.mjs`
   - prüft für ein konkretes Meeting read-only, welche Felder/Artefakte im aktuellen Account/Plan tatsächlich befüllt oder gesperrt sind
   - Standard-Query fordert planabhängige Paid-Felder (`audio_url`, `video_url`, `analytics`) bewusst nicht an; `--include-paid-fields` fordert sie gezielt nach (auf einem Free-Plan bricht Fireflies die gesamte Query mit `paid_required` ab)
@@ -229,6 +230,7 @@ Aktuelle Skripte:
   - Einsatz: kurze Capability-Checks, bevor neue Metadaten dauerhaft in den Sync übernommen werden
 - `relocate-local-meeting.mjs`
   - hängt ein bereits lokal gespiegeltes Meeting nur in `memory/evidence/meetings/` (oder `memory/references/meetings/`) um und zieht Frontmatter + `meetings.json` lokal nach
+  - `--to-project <slug>` verschiebt ein Meeting aus dem generellen Pool in den Projekt-Baum (`memory/evidence/projects/<slug>/meetings/<channel>/`); fail-loud bei Ziel-Kollision, ohne Klassifikationsänderung
   - keine Fireflies-API-Aktion; gedacht für lokale Nachpflege wie `ohne-channel` → `channel-slug`
 
 Empfohlene Sync-Modi:
