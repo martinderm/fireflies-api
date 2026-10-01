@@ -13,6 +13,7 @@ import {
 } from '../scripts/_fireflies-meetings.mjs';
 
 const RELOCATE_SCRIPT = fileURLToPath(new URL('../scripts/relocate-local-meeting.mjs', import.meta.url));
+const SYNC_SCRIPT = fileURLToPath(new URL('../scripts/sync-meetings-to-memory.mjs', import.meta.url));
 
 function createWorkspaceFixture(meetings) {
   const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'fireflies-project-'));
@@ -51,6 +52,14 @@ function writeMeetingFiles(workspaceRoot, meeting) {
 
 function runRelocate(workspaceRoot, args) {
   return spawnSync(process.execPath, [RELOCATE_SCRIPT, ...args], {
+    cwd: workspaceRoot,
+    env: { ...process.env, WORKSPACE_ROOT: workspaceRoot, PWD: workspaceRoot },
+    encoding: 'utf8'
+  });
+}
+
+function runSync(workspaceRoot, args) {
+  return spawnSync(process.execPath, [SYNC_SCRIPT, ...args], {
     cwd: workspaceRoot,
     env: { ...process.env, WORKSPACE_ROOT: workspaceRoot, PWD: workspaceRoot },
     encoding: 'utf8'
@@ -382,4 +391,100 @@ test('relocate plan: re-relocating drops the previous project tree while keeping
   const plan = buildProjectRelocatePlan(meeting, { projectSlug: 'pjr', workspaceRoot });
   assert.equal(plan.entryUpdates.project_slug, 'pjr');
   assert.deepEqual(plan.entryUpdates.project_slugs, ['beta', 'pjr']);
+});
+
+test('relocate plan: empty or empty-normalizing project slugs fail loud as empty_project_slug', () => {
+  const workspaceRoot = path.resolve('virtual-ws');
+  const meeting = {
+    meeting_id: 'm7',
+    slug: 'kickoff',
+    dateString: '2026-02-09',
+    channel_slug: 'ops',
+    summary_path: 'memory/evidence/meetings/ops/2026-02-09-kickoff.summary.md',
+    transcript_path: 'memory/evidence/meetings/ops/2026-02-09-kickoff.transcript.md'
+  };
+  for (const rawSlug of ['', '---', '   ', '&&&']) {
+    assert.throws(
+      () => buildProjectRelocatePlan(meeting, { projectSlug: rawSlug, workspaceRoot }),
+      /empty_project_slug:/,
+      `expected empty_project_slug for ${JSON.stringify(rawSlug)}`
+    );
+  }
+});
+
+test('relocate plan: a valid project slug is still accepted unchanged', () => {
+  const workspaceRoot = path.resolve('virtual-ws');
+  const meeting = {
+    meeting_id: 'm8',
+    slug: 'kickoff',
+    dateString: '2026-02-10',
+    channel_slug: 'ops',
+    summary_path: 'memory/evidence/meetings/ops/2026-02-10-kickoff.summary.md',
+    transcript_path: 'memory/evidence/meetings/ops/2026-02-10-kickoff.transcript.md'
+  };
+  const plan = buildProjectRelocatePlan(meeting, { projectSlug: 'pjr-relaunch', workspaceRoot });
+  assert.equal(plan.entryUpdates.project_slug, 'pjr-relaunch');
+});
+
+test('relocate cli: --to-project combined with the classic flags fails loud', (t) => {
+  const { workspaceRoot } = createWorkspaceFixture([]);
+  t.after(() => fs.rmSync(workspaceRoot, { recursive: true, force: true }));
+
+  const result = runRelocate(workspaceRoot, [
+    '--meeting-id', 'pool-1',
+    '--to-project', 'pjr-relaunch',
+    '--from-slug', 'ops',
+    '--to-slug', 'ops-2',
+    '--to-title', 'Ops 2',
+    '--topic-slug', 'topic',
+    '--resolved-at', '2026-02-03T10:00:00.000Z'
+  ]);
+  assert.equal(result.status, 2, result.stderr);
+  assert.match(result.stderr, /mutually_exclusive_flags:project_and_channel_relocation/);
+});
+
+test('sync cli: an empty-normalizing project slug fails loud before any request', (t) => {
+  const { workspaceRoot } = createWorkspaceFixture([]);
+  t.after(() => fs.rmSync(workspaceRoot, { recursive: true, force: true }));
+
+  const result = runSync(workspaceRoot, ['--project-slug', '---', '--limit', '1']);
+  assert.equal(result.status, 2, result.stderr);
+  assert.match(result.stderr, /empty_project_slug:---/);
+});
+
+test('sync cli: an empty project slug value fails loud before any request', (t) => {
+  const { workspaceRoot } = createWorkspaceFixture([]);
+  t.after(() => fs.rmSync(workspaceRoot, { recursive: true, force: true }));
+
+  const result = runSync(workspaceRoot, ['--project-slug', '', '--limit', '1']);
+  assert.equal(result.status, 2, result.stderr);
+  assert.match(result.stderr, /empty_project_slug:/);
+});
+
+test('sync cli: a flag following --project-slug is rejected as a missing value', (t) => {
+  const { workspaceRoot } = createWorkspaceFixture([]);
+  t.after(() => fs.rmSync(workspaceRoot, { recursive: true, force: true }));
+
+  const result = runSync(workspaceRoot, ['--project-slug', '--limit']);
+  assert.equal(result.status, 2, result.stderr);
+  assert.match(result.stderr, /missing value for --project-slug/);
+});
+
+test('relocate cli: an empty-normalizing target project exits 2 as a usage error', (t) => {
+  const { workspaceRoot } = createWorkspaceFixture([
+    {
+      meeting_id: 'pool-1',
+      title: 'Kickoff',
+      slug: 'kickoff',
+      dateString: '2026-02-03T10:00:00.000Z',
+      channel_slug: 'ops',
+      summary_path: 'memory/evidence/meetings/ops/2026-02-03-kickoff.summary.md',
+      transcript_path: 'memory/evidence/meetings/ops/2026-02-03-kickoff.transcript.md'
+    }
+  ]);
+  t.after(() => fs.rmSync(workspaceRoot, { recursive: true, force: true }));
+
+  const result = runRelocate(workspaceRoot, ['--meeting-id', 'pool-1', '--to-project', 'ohne-channel']);
+  assert.equal(result.status, 2, result.stderr);
+  assert.match(result.stderr, /empty_project_slug:ohne-channel/);
 });
