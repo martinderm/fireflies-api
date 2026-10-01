@@ -215,6 +215,7 @@ Aktuelle Skripte:
 - `get-meeting.mjs`
   - lädt ein einzelnes Meeting, `--mode minimal|full|sentences-only`
   - `--format markdown` rendert den Speaker-Dialog als Markdown (`[mm:ss] Speaker`), `--output <file>` schreibt das Ergebnis in eine Datei (stdout bleibt kurzer Bestätigungs-Envelope)
+  - `--format markdown` wählt ohne explizites `--mode` automatisch den sentences-only-Modus; ein explizites `--mode` gewinnt
   - `--sentences-only` fragt nur die Sentence-Felder ab (kein summary/minimal-Ballast)
 - `sync-meetings-to-memory.mjs`
   - synchronisiert Meetings in `memory/evidence/meetings/` (mit Fallback auf `memory/references/meetings/`)

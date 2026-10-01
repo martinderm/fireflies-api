@@ -4,8 +4,8 @@ cluster: adapter
 universe: live
 status: verified
 entity: scripts/_fireflies-meetings.mjs
-verified_at: 2026-09-30
-revision: dc0d4c2010031b1aeb9b57cd302f741da0122675
+verified_at: 2026-10-01
+revision: 03fa8e73ec212263aa41accde6391b683d05f01b
 ---
 
 # Meetings-Schema
