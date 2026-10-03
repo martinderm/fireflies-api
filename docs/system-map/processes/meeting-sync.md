@@ -3,8 +3,8 @@ type: process
 universe: live
 status: verified
 entity: scripts/sync-meetings-to-memory.mjs
-verified_at: 2026-10-01
-revision: 6ca11a640811f1bbc0cb4bab5f3f90424064eaba
+verified_at: 2026-10-03
+revision: 38ab361f1e8371e32ded20aa201d8db9140891eb
 consumes: [../objects/sync.md, ../objects/meetings-schema.md, ../objects/client.md]
 produces: [../objects/skill-behavior.md]
 ---
