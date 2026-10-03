@@ -131,13 +131,14 @@ function relocateToProject(state, meeting) {
     }
   }
 
-  const summaryUpdated = updateFrontmatter(fs.readFileSync(summaryFrom, 'utf8'), plan.frontmatterUpdates);
-  const transcriptUpdated = updateFrontmatter(fs.readFileSync(transcriptFrom, 'utf8'), plan.frontmatterUpdates);
+  const summaryOriginal = fs.readFileSync(summaryFrom, 'utf8');
+  const transcriptOriginal = fs.readFileSync(transcriptFrom, 'utf8');
 
-  fs.writeFileSync(summaryFrom, summaryUpdated, 'utf8');
-  fs.writeFileSync(transcriptFrom, transcriptUpdated, 'utf8');
   moveFile(summaryFrom, summaryTo, { overwrite: false });
   moveFile(transcriptFrom, transcriptTo, { overwrite: false });
+
+  fs.writeFileSync(summaryTo, updateFrontmatter(summaryOriginal, plan.frontmatterUpdates), 'utf8');
+  fs.writeFileSync(transcriptTo, updateFrontmatter(transcriptOriginal, plan.frontmatterUpdates), 'utf8');
 
   meeting.summary_path = plan.entryUpdates.summary_path;
   meeting.transcript_path = plan.entryUpdates.transcript_path;

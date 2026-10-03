@@ -1,13 +1,11 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { firefliesGraphQL, printError, printJson, loadSettingsJson, resolveWorkspaceRoot } from './_fireflies-client.mjs';
 import { LIST_MEETINGS_FIELDS, buildGetMeetingQuery, buildListMeetingsRequest, buildMeetingDestinationPaths, renderTranscriptMarkdown, slugify } from './_fireflies-meetings.mjs';
 import { relativeWorkspacePath } from './_path-helpers.mjs';
 import { yamlString, yamlScalar, yamlInline } from './_yaml-helpers.mjs';
-
-const workspaceRoot = resolveWorkspaceRoot();
-const settings = loadSettingsJson();
 
 function resolveMeetingsRoot(wsRoot, settingsObj) {
   const custom = settingsObj?.['fireflies-api']?.meetingsRoot || settingsObj?.fireflies?.meetingsRoot;
@@ -29,9 +27,6 @@ function resolveMeetingsRoot(wsRoot, settingsObj) {
   return evidenceMeetings;
 }
 
-const meetingsRoot = resolveMeetingsRoot(workspaceRoot, settings);
-const meetingsJsonPath = path.join(meetingsRoot, 'meetings.json');
-const ACCOUNT_REF = process.env.FIREFLIES_ACCOUNT || settings?.['fireflies-api']?.account || settings?.fireflies?.account || null;
 const ENDPOINT = 'https://api.fireflies.ai/graphql';
 const CLOUD_TITLE_SUFFIX = ' (syncd)';
 const UPDATE_MEETING_TITLE_MUTATION = `mutation UpdateMeetingTitle($input: UpdateMeetingTitleInput!) {
@@ -220,7 +215,7 @@ function buildHaystack(meeting) {
   return normalizeText(parts.filter(Boolean).join(' \n '));
 }
 
-function computeMeetingFingerprint(meeting) {
+export function computeMeetingFingerprint(meeting) {
   const payload = {
     title: meeting.title ?? null,
     dateString: meeting.dateString ?? null,
@@ -264,7 +259,7 @@ function classifyMeeting(meeting, channelMapping, channelSlug) {
   };
 }
 
-function buildFrontmatter(meta) {
+function buildFrontmatter(meta, accountRef) {
   return [
     '---',
     `meeting_id: ${yamlString(meta.meeting_id)}`,
@@ -323,14 +318,14 @@ function buildFrontmatter(meta) {
     `first_synced_at: ${yamlString(meta.first_synced_at)}`,
     `last_synced_at: ${yamlString(meta.last_synced_at)}`,
     `source_system: "fireflies"`,
-    `source_account_ref: ${yamlString(ACCOUNT_REF)}`,
+    `source_account_ref: ${yamlString(accountRef)}`,
     '---',
     ''
   ].join('\n');
 }
 
-function buildSummaryMarkdown(meta, meeting, notes) {
-  const fm = buildFrontmatter(meta);
+function buildSummaryMarkdown(meta, meeting, notes, accountRef) {
+  const fm = buildFrontmatter(meta, accountRef);
   const participants = (meeting.participants ?? []).length ? meeting.participants.join(', ') : '-';
   const speakers = listSpeakerNames(meeting).length
     ? listSpeakerNames(meeting).join(', ')
@@ -353,8 +348,8 @@ function buildSummaryMarkdown(meta, meeting, notes) {
   return `${fm}# ${meeting.title}\n\n## Kurzüberblick\n- Datum: ${meeting.dateString ?? '-'}\n- Dauer: ${meeting.duration ?? '-'}\n- Channel: ${meta.channel ?? '-'}\n- Organizer: ${meeting.organizer_email ?? '-'}\n- Teilnehmer: ${participants}\n- Transcript URL: ${meeting.transcript_url ?? '-'}\n\n## Summary\n\n### Executive Summary\n${executive}\n\n### Key Points\n${keyPoints}\n\n### Decisions\n-\n\n### Action Items\n${actionItems}\n\n### Open Questions\n${openQuestions}\n\n### Detailed Notes\n${detailedNotes || '-'}\n\n### Extended Sections\n${extendedSectionsMd}\n\n### Participants and Speakers\n- Teilnehmer: ${participants}\n- Speakers: ${speakers}\n\n### Analytics Snapshot\n- Sentiment: nicht abgefragt\n- Kategorien: nicht abgefragt\n- Speaker Insights: nicht abgefragt\n\n### Related Systems\n- Meeting Link: ${meeting.meeting_link ?? '-'}\n- Calendar: ${meeting.calendar_id ?? '-'}\n- Channels: ${channels}\n- Shared With: ${(meeting.shared_with ?? []).length ? meeting.shared_with.map((x) => x.email || x.name).join(', ') : '-'}\n\n### Source Notes\n- Fireflies Meeting ID: ${meeting.id}\n- Last Synced: ${meta.last_synced_at}\n- Data Completeness: Summary + Volltranskript lokal gespiegelt\n- Classification Notes: ${notes.length ? notes.join('; ') : '-'}\n`;
 }
 
-function buildTranscriptMarkdown(meta, meeting) {
-  const fm = buildFrontmatter(meta);
+function buildTranscriptMarkdown(meta, meeting, accountRef) {
+  const fm = buildFrontmatter(meta, accountRef);
   const sentences = renderTranscriptMarkdown(meeting, { bracketed: false });
 
   return `${fm}# ${meeting.title} - Volltranskript\n\n## Metadaten\n- Meeting ID: ${meeting.id}\n- Datum: ${meeting.dateString ?? '-'}\n- Dauer: ${meeting.duration ?? '-'}\n- Channel: ${meta.channel ?? '-'}\n- Transcript URL: ${meeting.transcript_url ?? '-'}\n\n## Volltranskript\n\n${sentences}\n`;
@@ -388,68 +383,22 @@ function upsertMeeting(existingMeetings, entry) {
   }
 }
 
-const args = parseArgs(process.argv.slice(2));
-const detailQuery = buildGetMeetingQuery('full');
-let exitCode = 1;
-
-try {
-  if (Number.isNaN(args.limit) || args.limit < 1 || args.limit > 50) {
-    exitCode = 2;
-    throw new Error('limit_must_be_between_1_and_50');
-  }
-
-  if (!['new', 'all'].includes(args.mode)) {
-    exitCode = 2;
-    throw new Error('mode_must_be_new_or_all');
-  }
-
-  if (!args.projectSlug || args.projectSlug === 'ohne-channel') {
-    exitCode = 2;
-    throw new Error(`empty_project_slug:${args.projectSlugRaw ?? ''}`);
-  }
-
-  if (args.projectSlugRaw && args.projectSlugRaw.startsWith('--')) {
-    exitCode = 2;
-    throw new Error('missing value for --project-slug');
-  }
-
-  const meetingsState = normalizeMeetingsState(readJson(meetingsJsonPath, null));
+export async function runMeetingsIntake({ meetingsState, candidates, graphList, graphDetail, args, context = {} }) {
+  const io = context.io ?? {};
+  const ensureDirFn = io.ensureDir ?? ensureDir;
+  const writeJsonFn = io.writeJson ?? writeJson;
+  const writeMarkdownFn = io.writeMarkdown ?? ((filePath, content) => fs.writeFileSync(filePath, content, 'utf8'));
+  const workspaceRoot = context.workspaceRoot;
+  const meetingsRoot = context.meetingsRoot;
+  const accountRef = context.accountRef ?? context.settings?.['fireflies-api']?.account ?? context.settings?.fireflies?.account ?? null;
+  const detailQuery = buildGetMeetingQuery('full');
 
   const knownMeetingsById = new Map((meetingsState.meetings ?? []).map((meeting) => [meeting.meeting_id, meeting]));
-  let listedMeetings;
-
-  if (args.meetingId) {
-    listedMeetings = [{ id: args.meetingId, title: null }];
-  } else if (args.refreshChanged) {
-    listedMeetings = (meetingsState.meetings ?? []).map((meeting) => ({ id: meeting.meeting_id, title: meeting.title ?? null }));
-  } else {
-    const listOptions = {
-      limit: args.limit,
-      skip: args.skip,
-      ...(args.contextChannelSlug && meetingsState.channel_mappings?.[args.contextChannelSlug]?.channel_id
-        ? { channel_id: meetingsState.channel_mappings[args.contextChannelSlug].channel_id }
-        : {})
-    };
-    const { query: listQuery, variables: listVariables } = buildListMeetingsRequest(
-      listOptions,
-      LIST_MEETINGS_FIELDS
-    );
-
-    const listed = await firefliesGraphQL({
-      query: listQuery,
-      variables: listVariables
-    });
-
-    listedMeetings = listed.transcripts ?? [];
-  }
-
-  const candidates = listedMeetings.filter((meeting) => args.mode === 'all' || !knownMeetingsById.has(meeting.id) || args.meetingId || args.refreshChanged);
-
   const processed = [];
-  ensureDir(meetingsRoot);
+  ensureDirFn(meetingsRoot);
 
   for (const listedMeeting of candidates) {
-    const detailData = await firefliesGraphQL({
+    const detailData = await graphDetail({
       query: detailQuery,
       variables: { transcriptId: listedMeeting.id }
     });
@@ -500,7 +449,7 @@ try {
       workspaceRoot
     });
     const folderPath = destination.folderPath;
-    ensureDir(folderPath);
+    ensureDirFn(folderPath);
 
     const summaryAbsPath = path.join(folderPath, destination.summaryFileName);
     const transcriptAbsPath = path.join(folderPath, destination.transcriptFileName);
@@ -590,8 +539,8 @@ try {
       last_synced_at: lastSyncedAt
     };
 
-    fs.writeFileSync(summaryAbsPath, buildSummaryMarkdown(meta, localMeeting, classified.classification_notes), 'utf8');
-    fs.writeFileSync(transcriptAbsPath, buildTranscriptMarkdown(meta, localMeeting), 'utf8');
+    writeMarkdownFn(summaryAbsPath, buildSummaryMarkdown(meta, localMeeting, classified.classification_notes, accountRef));
+    writeMarkdownFn(transcriptAbsPath, buildTranscriptMarkdown(meta, localMeeting, accountRef));
 
     const cloudTitleUpdated = false;
     const cloudTitleError = 'skipped-no-write';
@@ -656,7 +605,7 @@ try {
       last_synced_at: lastSyncedAt,
       source: {
         system: 'fireflies',
-        account_ref: ACCOUNT_REF,
+        account_ref: accountRef,
         endpoint: ENDPOINT
       }
     };
@@ -689,21 +638,111 @@ try {
   }
 
   meetingsState.meetings.sort((a, b) => Number(b.date || 0) - Number(a.date || 0));
-  writeJson(meetingsJsonPath, meetingsState);
+  const meetingsJsonPath = path.join(meetingsRoot, 'meetings.json');
+  writeJsonFn(meetingsJsonPath, meetingsState);
 
-  printJson({
+  const listedCount = context.listedCount ?? candidates.length;
+  const envelope = {
     ok: true,
     mode: args.mode,
     refresh_changed: args.refreshChanged,
     meeting_id: args.meetingId ?? null,
     project_slug: args.projectSlug ?? null,
-    listed: listedMeetings.length,
+    listed: listedCount,
     synced: processed.length,
-    skipped_existing: args.mode === 'new' && !args.meetingId && !args.refreshChanged ? (listedMeetings.length - processed.length) : 0,
+    skipped_existing: args.mode === 'new' && !args.meetingId && !args.refreshChanged ? (listedCount - processed.length) : 0,
     meetings: processed,
     meetings_json: relativeWorkspacePath(workspaceRoot, meetingsJsonPath)
-  });
-} catch (error) {
-  printError(error);
-  process.exitCode = exitCode;
+  };
+
+  return { meetingsState, processed, envelope };
+}
+
+async function runSyncCli() {
+  const workspaceRoot = resolveWorkspaceRoot();
+  const settings = loadSettingsJson();
+  const meetingsRoot = resolveMeetingsRoot(workspaceRoot, settings);
+  const meetingsJsonPath = path.join(meetingsRoot, 'meetings.json');
+  const accountRef = process.env.FIREFLIES_ACCOUNT || settings?.['fireflies-api']?.account || settings?.fireflies?.account || null;
+  const args = parseArgs(process.argv.slice(2));
+  let exitCode = 1;
+
+  try {
+    if (Number.isNaN(args.limit) || args.limit < 1 || args.limit > 50) {
+      exitCode = 2;
+      throw new Error('limit_must_be_between_1_and_50');
+    }
+
+    if (!['new', 'all'].includes(args.mode)) {
+      exitCode = 2;
+      throw new Error('mode_must_be_new_or_all');
+    }
+
+    if (!args.projectSlug || args.projectSlug === 'ohne-channel') {
+      exitCode = 2;
+      throw new Error(`empty_project_slug:${args.projectSlugRaw ?? ''}`);
+    }
+
+    if (args.projectSlugRaw && args.projectSlugRaw.startsWith('--')) {
+      exitCode = 2;
+      throw new Error('missing value for --project-slug');
+    }
+
+    const meetingsState = normalizeMeetingsState(readJson(meetingsJsonPath, null));
+    const knownMeetingsById = new Map((meetingsState.meetings ?? []).map((meeting) => [meeting.meeting_id, meeting]));
+    let listedMeetings;
+
+    if (args.meetingId) {
+      listedMeetings = [{ id: args.meetingId, title: null }];
+    } else if (args.refreshChanged) {
+      listedMeetings = (meetingsState.meetings ?? []).map((meeting) => ({ id: meeting.meeting_id, title: meeting.title ?? null }));
+    } else {
+      const listOptions = {
+        limit: args.limit,
+        skip: args.skip,
+        ...(args.contextChannelSlug && meetingsState.channel_mappings?.[args.contextChannelSlug]?.channel_id
+          ? { channel_id: meetingsState.channel_mappings[args.contextChannelSlug].channel_id }
+          : {})
+      };
+      const { query: listQuery, variables: listVariables } = buildListMeetingsRequest(
+        listOptions,
+        LIST_MEETINGS_FIELDS
+      );
+
+      const listed = await firefliesGraphQL({
+        query: listQuery,
+        variables: listVariables
+      });
+
+      listedMeetings = listed.transcripts ?? [];
+    }
+
+    const candidates = listedMeetings.filter((meeting) => args.mode === 'all' || !knownMeetingsById.has(meeting.id) || args.meetingId || args.refreshChanged);
+
+    const { envelope } = await runMeetingsIntake({
+      meetingsState,
+      candidates,
+      graphList: firefliesGraphQL,
+      graphDetail: firefliesGraphQL,
+      args,
+      context: {
+        meetingsRoot,
+        workspaceRoot,
+        settings,
+        accountRef,
+        listedCount: listedMeetings.length
+      }
+    });
+
+    printJson(envelope);
+  } catch (error) {
+    printError(error);
+    process.exitCode = exitCode;
+  }
+}
+
+const isDirectRun = Boolean(process.argv[1]) && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (isDirectRun) {
+  runSyncCli();
 }

@@ -470,6 +470,63 @@ test('sync cli: a flag following --project-slug is rejected as a missing value',
   assert.match(result.stderr, /missing value for --project-slug/);
 });
 
+test('relocate cli: a failed second move never applies frontmatter to a moved file', (t) => {
+  const { workspaceRoot } = createWorkspaceFixture([]);
+  t.after(() => fs.rmSync(workspaceRoot, { recursive: true, force: true }));
+  const sharedPath = 'memory/evidence/meetings/ops/2026-02-03-kickoff.summary.md';
+  const poolMeeting = {
+    meeting_id: 'pool-1',
+    title: 'Kickoff',
+    slug: 'kickoff',
+    dateString: '2026-02-03T10:00:00.000Z',
+    channel: 'Ops',
+    channel_slug: 'ops',
+    channels: ['Ops'],
+    project_slug: null,
+    project_slugs: [],
+    classification_status: 'unmapped',
+    review_recommended: true,
+    llm_review_status: 'pending',
+    summary_path: sharedPath,
+    transcript_path: sharedPath,
+    review_input: { project_slug: null },
+    server_change_status: 'unchanged',
+    server_changed_since_last_sync: false
+  };
+  fs.writeFileSync(
+    path.join(workspaceRoot, 'memory', 'evidence', 'meetings', 'meetings.json'),
+    `${JSON.stringify({ channel_mappings: {}, meetings: [poolMeeting] }, null, 2)}\n`,
+    'utf8'
+  );
+  const sourceAbs = path.join(workspaceRoot, sharedPath);
+  fs.mkdirSync(path.dirname(sourceAbs), { recursive: true });
+  fs.writeFileSync(sourceAbs, [
+    '---',
+    'meeting_id: "pool-1"',
+    `summary_path: "${sharedPath}"`,
+    `transcript_path: "${sharedPath}"`,
+    'project_slug: null',
+    '---',
+    '# Kickoff',
+    ''
+  ].join('\n'), 'utf8');
+
+  const result = runRelocate(workspaceRoot, ['--meeting-id', 'pool-1', '--to-project', 'pjr-relaunch']);
+  assert.equal(result.status, 1, result.stderr);
+  assert.match(result.stderr, /source_file_missing:/);
+
+  const projectFolder = path.join(workspaceRoot, 'memory', 'evidence', 'projects', 'pjr-relaunch', 'meetings', 'ops');
+  const movedSummary = fs.readFileSync(path.join(projectFolder, '2026-02-03-kickoff.summary.md'), 'utf8');
+  assert.doesNotMatch(movedSummary, /project_slug: "pjr-relaunch"/);
+  assert.match(movedSummary, /project_slug: null/);
+  assert.equal(fs.existsSync(path.join(projectFolder, '2026-02-03-kickoff.transcript.md')), false);
+
+  const state = JSON.parse(fs.readFileSync(path.join(workspaceRoot, 'memory', 'evidence', 'meetings', 'meetings.json'), 'utf8'));
+  assert.equal(state.meetings[0].summary_path, sharedPath);
+  assert.equal(state.meetings[0].transcript_path, sharedPath);
+  assert.equal(state.meetings[0].project_slug, null);
+});
+
 test('relocate cli: an empty-normalizing target project exits 2 as a usage error', (t) => {
   const { workspaceRoot } = createWorkspaceFixture([
     {

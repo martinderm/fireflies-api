@@ -4,7 +4,7 @@ universe: live
 status: verified
 entity: scripts/relocate-local-meeting.mjs
 verified_at: 2026-10-03
-revision: 38ab361f1e8371e32ded20aa201d8db9140891eb
+revision: 3b90b8f8ae06a0e6d99ea69d68fc4982db4edf31
 consumes: [../objects/sync.md]
 produces: [../objects/sync.md]
 ---

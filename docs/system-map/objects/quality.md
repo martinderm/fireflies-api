@@ -5,7 +5,7 @@ universe: live
 status: verified
 entity: tests/
 verified_at: 2026-10-03
-revision: 38ab361f1e8371e32ded20aa201d8db9140891eb
+revision: 3b90b8f8ae06a0e6d99ea69d68fc4982db4edf31
 ---
 
 # Qualität
@@ -23,6 +23,7 @@ Der Skill ist reines Node (ESM); der eingebaute Test-Runner hält die Toolchain 
 - [tests/probe-query-smoke.mjs](../../../tests/probe-query-smoke.mjs) — `tests/probe-query-smoke.mjs:1`
 - [tests/sync-project-smoke.mjs](../../../tests/sync-project-smoke.mjs) — `tests/sync-project-smoke.mjs:1`
 - [tests/path-helpers-smoke.mjs](../../../tests/path-helpers-smoke.mjs) — `tests/path-helpers-smoke.mjs:1`
+- [tests/sync-intake-smoke.mjs](../../../tests/sync-intake-smoke.mjs) — `tests/sync-intake-smoke.mjs:1` (Intake-Kaskade new/unknown/unchanged/changed über gemockte Graph-Fns, io-Overrides, Envelope-Form)
 
 ## Connected to
 [Client](client.md), [CLI](cli.md), [Meetings-Schema](meetings-schema.md).

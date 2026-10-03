@@ -233,6 +233,7 @@ Aktuelle Skripte:
   - hängt ein bereits lokal gespiegeltes Meeting nur in `memory/evidence/meetings/` (oder `memory/references/meetings/`) um und zieht Frontmatter + `meetings.json` lokal nach
   - `--to-project <slug>` verschiebt ein Meeting aus dem generellen Pool in den Projekt-Baum (`memory/evidence/projects/<slug>/meetings/<channel>/`); fail-loud bei Ziel-Kollision, ohne Klassifikationsänderung
   - keine Fireflies-API-Aktion; gedacht für lokale Nachpflege wie `ohne-channel` → `channel-slug`
+  - **Recovery bei Teilverschiebung**: Der Executor prüft zuerst beide Zielpfade, verschiebt dann beide Dateien und schreibt die Frontmatter-Updates erst danach an die Zielpfade. Scheitert der zweite Move (z. B. fehlende Quelle oder FS-Fehler), bleibt `meetings.json` unverändert und zeigt weiterhin die Quellpfade — die bereits verschobene Datei liegt dann am Ziel (mit unverändertem Original-Frontmatter), die dort verlinkte Quelle existiert nicht mehr (dangling Registry-Zeiger bis zum Abschluss). Re-Runs konvergieren NICHT (`target_file_exists` am Pre-Check). Recovery: entweder die verschobene Datei manuell zurück an die Quelle legen, die Kollision beseitigen und `--to-project` erneut ausführen — oder manuell abschließen: Restdatei in den Zielordner verschieben, Frontmatter beider Zieldateien (`summary_path`, `transcript_path`, `project_slug`) nachziehen und die `meetings.json`-Pfade anpassen.
 
 Empfohlene Sync-Modi:
 - Standardlauf ohne Zusatzoptionen
