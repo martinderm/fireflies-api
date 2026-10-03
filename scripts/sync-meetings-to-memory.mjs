@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { firefliesGraphQL, printError, printJson, loadSettingsJson, resolveWorkspaceRoot } from './_fireflies-client.mjs';
 import { LIST_MEETINGS_FIELDS, buildGetMeetingQuery, buildListMeetingsRequest, buildMeetingDestinationPaths, renderTranscriptMarkdown, slugify } from './_fireflies-meetings.mjs';
+import { relativeWorkspacePath } from './_path-helpers.mjs';
 import { yamlString, yamlScalar, yamlInline } from './_yaml-helpers.mjs';
 
 const workspaceRoot = resolveWorkspaceRoot();
@@ -378,10 +379,6 @@ function buildReviewInput(meeting, channelMapping, classified, channelTitle, cha
   };
 }
 
-function relativeWorkspacePath(absPath) {
-  return path.relative(workspaceRoot, absPath).replace(/\\/g, '/');
-}
-
 function upsertMeeting(existingMeetings, entry) {
   const index = existingMeetings.findIndex((meeting) => meeting.meeting_id === entry.meeting_id);
   if (index >= 0) {
@@ -507,8 +504,8 @@ try {
 
     const summaryAbsPath = path.join(folderPath, destination.summaryFileName);
     const transcriptAbsPath = path.join(folderPath, destination.transcriptFileName);
-    const summaryPath = relativeWorkspacePath(summaryAbsPath);
-    const transcriptPath = relativeWorkspacePath(transcriptAbsPath);
+    const summaryPath = relativeWorkspacePath(workspaceRoot, summaryAbsPath);
+    const transcriptPath = relativeWorkspacePath(workspaceRoot, transcriptAbsPath);
     const lastSyncedAt = new Date().toISOString();
 
     const fingerprint = computeMeetingFingerprint(localMeeting);
@@ -704,7 +701,7 @@ try {
     synced: processed.length,
     skipped_existing: args.mode === 'new' && !args.meetingId && !args.refreshChanged ? (listedMeetings.length - processed.length) : 0,
     meetings: processed,
-    meetings_json: relativeWorkspacePath(meetingsJsonPath)
+    meetings_json: relativeWorkspacePath(workspaceRoot, meetingsJsonPath)
   });
 } catch (error) {
   printError(error);

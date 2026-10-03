@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { relativeWorkspacePath } from './_path-helpers.mjs';
 import { yamlString, yamlDurationMinutes } from './_yaml-helpers.mjs';
 
 function normalizeText(value) {
@@ -513,10 +514,6 @@ export function buildListMeetingsRequest(options = {}, fields = LIST_MEETINGS_FI
 
 function resolveProjectRoot(workspaceRoot, projectSlug) {
   return path.join(workspaceRoot, 'memory', 'evidence', 'projects', projectSlug);
-}
-
-function relativeWorkspacePath(workspaceRoot, absolutePath) {
-  return path.relative(workspaceRoot, absolutePath).replace(/\\/g, '/');
 }
 
 export function buildMeetingDestinationPaths(options = {}) {
