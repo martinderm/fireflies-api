@@ -6,7 +6,8 @@ Inputs: konkreter Skript-Aufruf, zugehörige Objektkarte und belegte Quellmodule
 | :--- | :--- |
 | api-call | [api-call](api-call.md) |
 | meeting-sync | [meeting-sync](meeting-sync.md) |
-| local-relocate | [local-relocate](local-relocate.md) |
+
+`local-relocate` wurde mit dem Adapter-Schreibpfad entfernt; lokale Meeting-Dateien verschiebt nur der kanonische Writer.
 
 Process: Input, tatsächliche Schritte und Output der gewählten Karte gegen Quelle prüfen.
 Outputs: verifizierter Ablauf und direkter Änderungsscope.

@@ -7,541 +7,352 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 import {
-  buildMeetingDestinationPaths,
-  buildProjectRelocatePlan,
-  slugify
-} from '../scripts/_fireflies-meetings.mjs';
+  parseSyncArgs,
+  readRegistryFile,
+  resolveRouting,
+  runSync
+} from '../scripts/sync-meetings-to-memory.mjs';
 
-const RELOCATE_SCRIPT = fileURLToPath(new URL('../scripts/relocate-local-meeting.mjs', import.meta.url));
 const SYNC_SCRIPT = fileURLToPath(new URL('../scripts/sync-meetings-to-memory.mjs', import.meta.url));
 
-function createWorkspaceFixture(meetings) {
-  const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'fireflies-project-'));
+function createWorkspace(t) {
+  const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'fireflies-sync-cli-'));
+  t.after(() => fs.rmSync(workspaceRoot, { recursive: true, force: true }));
   fs.mkdirSync(path.join(workspaceRoot, '.agents'), { recursive: true });
   const meetingsRoot = path.join(workspaceRoot, 'memory', 'evidence', 'meetings');
   fs.mkdirSync(meetingsRoot, { recursive: true });
-  fs.writeFileSync(
-    path.join(meetingsRoot, 'meetings.json'),
-    `${JSON.stringify({ channel_mappings: {}, meetings }, null, 2)}\n`,
-    'utf8'
-  );
-  return { workspaceRoot, meetingsRoot };
+  return { workspaceRoot, meetingsRoot, registryPath: path.join(meetingsRoot, 'meetings.json') };
 }
 
-function writeMeetingFiles(workspaceRoot, meeting) {
-  for (const kind of ['summary', 'transcript']) {
-    const relative = meeting[`${kind}_path`];
-    const absolute = path.join(workspaceRoot, relative);
-    fs.mkdirSync(path.dirname(absolute), { recursive: true });
-    const content = [
-      '---',
-      `meeting_id: "${meeting.meeting_id}"`,
-      `slug: "${meeting.slug}"`,
-      `dateString: "${meeting.dateString}"`,
-      `channel_slug: "${meeting.channel_slug}"`,
-      `project_slug: ${meeting.project_slug === null ? 'null' : JSON.stringify(meeting.project_slug)}`,
-      `summary_path: "${meeting.summary_path}"`,
-      `transcript_path: "${meeting.transcript_path}"`,
-      '---',
-      `# ${meeting.title}`,
-      ''
-    ].join('\n');
-    fs.writeFileSync(absolute, content, 'utf8');
+function writeFakeWriter(dir, capabilitiesExitCode = 0) {
+  const writer = path.join(dir, 'fake_ingest_meeting.mjs');
+  fs.writeFileSync(writer, `
+if (process.argv.slice(2).includes('--capabilities')) {
+  if (${capabilitiesExitCode} !== 0) {
+    process.stderr.write('capabilities failed');
+    process.exitCode = ${capabilitiesExitCode};
+  } else {
+    process.stdout.write(JSON.stringify({
+      action: 'capabilities', success: true, state: 'ready', message: 'ok',
+      data: { record_schema: 'meeting-record/1', writer_version: 'meeting-desk/1' }, error: null
+    }));
   }
+} else {
+  process.stdout.write(JSON.stringify({
+    action: 'ingest', success: true, state: 'committed', message: 'ok',
+    data: { entry: {}, meeting_id: 'x', paths: {}, changed: false }, error: null
+  }));
+}
+`, 'utf8');
+  return writer;
 }
 
-function runRelocate(workspaceRoot, args) {
-  return spawnSync(process.execPath, [RELOCATE_SCRIPT, ...args], {
-    cwd: workspaceRoot,
-    env: { ...process.env, WORKSPACE_ROOT: workspaceRoot, PWD: workspaceRoot },
-    encoding: 'utf8'
-  });
-}
-
-function runSync(workspaceRoot, args) {
+function runSyncCli(workspaceRoot, args, extraEnv = {}) {
   return spawnSync(process.execPath, [SYNC_SCRIPT, ...args], {
     cwd: workspaceRoot,
-    env: { ...process.env, WORKSPACE_ROOT: workspaceRoot, PWD: workspaceRoot },
-    encoding: 'utf8'
+    env: { ...process.env, WORKSPACE_ROOT: workspaceRoot, PWD: workspaceRoot, ...extraEnv },
+    encoding: 'utf8',
+    timeout: 30000
   });
 }
 
-test('destination paths: without a project slug the layout is byte-identical to the pool layout', () => {
-  const meetingsRoot = path.join(path.resolve('virtual-ws'), 'memory', 'evidence', 'meetings');
-  const result = buildMeetingDestinationPaths({
-    meetingsRoot,
-    channelSlug: 'ops',
-    datePrefix: '2026-02-03',
-    meetingSlug: 'kickoff'
-  });
-  assert.deepEqual(result, {
-    folderPath: path.join(meetingsRoot, 'ops'),
-    summaryFileName: '2026-02-03-kickoff.summary.md',
-    transcriptFileName: '2026-02-03-kickoff.transcript.md'
-  });
+test('sync args: an absent --project-slug is a valid unmapped intake, not a routing error', () => {
+  const args = parseSyncArgs(['--limit', '1']);
+  assert.deepEqual(resolveRouting(args), { topic: null, project: null, event: null });
+  assert.equal(args.projectSlugRaw, undefined);
 });
 
-test('destination paths: a missing channel falls back to ohne-channel in the pool layout', () => {
-  const meetingsRoot = path.join(path.resolve('virtual-ws'), 'memory', 'evidence', 'meetings');
-  const result = buildMeetingDestinationPaths({
-    meetingsRoot,
-    channelSlug: null,
-    datePrefix: '2026-02-03',
-    meetingSlug: 'kickoff'
-  });
-  assert.equal(result.folderPath, path.join(meetingsRoot, 'ohne-channel'));
+test('sync args: --project, --topic and --event are the canonical routing options', () => {
+  const args = parseSyncArgs(['--project', 'pjr', '--topic', 'kickoff', '--event', 'launch']);
+  assert.deepEqual(resolveRouting(args), { topic: 'kickoff', project: 'pjr', event: 'launch' });
 });
 
-test('destination paths: a project slug nests the channel folder under the project meetings tree', () => {
-  const workspaceRoot = path.resolve('virtual-ws');
-  const result = buildMeetingDestinationPaths({
-    meetingsRoot: path.join(workspaceRoot, 'memory', 'evidence', 'meetings'),
-    projectSlug: 'pjr-relaunch',
-    channelSlug: 'ops',
-    datePrefix: '2026-02-03',
-    meetingSlug: 'kickoff',
-    workspaceRoot
-  });
-  assert.deepEqual(result, {
-    folderPath: path.join(workspaceRoot, 'memory', 'evidence', 'projects', 'pjr-relaunch', 'meetings', 'ops'),
-    summaryFileName: '2026-02-03-kickoff.summary.md',
-    transcriptFileName: '2026-02-03-kickoff.transcript.md'
-  });
+test('sync args: legacy routing aliases still map onto the canonical route', () => {
+  const args = parseSyncArgs(['--project-slug', 'pjr', '--topic-slug', 'kickoff', '--event-slug', 'launch']);
+  assert.deepEqual(resolveRouting(args), { topic: 'kickoff', project: 'pjr', event: 'launch' });
 });
 
-test('destination paths: a project slug with a missing channel keeps the ohne-channel folder', () => {
-  const workspaceRoot = path.resolve('virtual-ws');
-  const result = buildMeetingDestinationPaths({
-    meetingsRoot: path.join(workspaceRoot, 'memory', 'evidence', 'meetings'),
-    projectSlug: 'pjr-relaunch',
-    channelSlug: null,
-    datePrefix: '2026-02-03',
-    meetingSlug: 'kickoff',
-    workspaceRoot
-  });
-  assert.equal(
-    result.folderPath,
-    path.join(workspaceRoot, 'memory', 'evidence', 'projects', 'pjr-relaunch', 'meetings', 'ohne-channel')
-  );
-});
-
-test('relocate plan: derives every path, frontmatter and entry delta from the meeting fields', () => {
-  const workspaceRoot = path.resolve('virtual-ws');
-  const meeting = {
-    meeting_id: 'm1',
-    title: 'Kickoff',
-    slug: 'kickoff',
-    dateString: '2026-02-03T10:00:00.000Z',
-    channel_slug: 'ops',
-    project_slugs: ['alpha'],
-    summary_path: 'memory/evidence/meetings/ops/2026-02-03-kickoff.summary.md',
-    transcript_path: 'memory/evidence/meetings/ops/2026-02-03-kickoff.transcript.md'
-  };
-
-  const plan = buildProjectRelocatePlan(meeting, { projectSlug: 'pjr-relaunch', workspaceRoot });
-  const projectFolder = path.join(workspaceRoot, 'memory', 'evidence', 'projects', 'pjr-relaunch', 'meetings', 'ops');
-
-  assert.deepEqual(plan.fromPaths, {
-    summary: path.join(workspaceRoot, 'memory/evidence/meetings/ops/2026-02-03-kickoff.summary.md'),
-    transcript: path.join(workspaceRoot, 'memory/evidence/meetings/ops/2026-02-03-kickoff.transcript.md')
-  });
-  assert.deepEqual(plan.toPaths, {
-    summary: path.join(projectFolder, '2026-02-03-kickoff.summary.md'),
-    transcript: path.join(projectFolder, '2026-02-03-kickoff.transcript.md')
-  });
-  assert.deepEqual(plan.frontmatterUpdates, {
-    project_slug: 'pjr-relaunch',
-    summary_path: 'memory/evidence/projects/pjr-relaunch/meetings/ops/2026-02-03-kickoff.summary.md',
-    transcript_path: 'memory/evidence/projects/pjr-relaunch/meetings/ops/2026-02-03-kickoff.transcript.md'
-  });
-  assert.deepEqual(plan.entryUpdates, {
-    project_slug: 'pjr-relaunch',
-    project_slugs: ['alpha', 'pjr-relaunch'],
-    project_scoped: true,
-    summary_path: 'memory/evidence/projects/pjr-relaunch/meetings/ops/2026-02-03-kickoff.summary.md',
-    transcript_path: 'memory/evidence/projects/pjr-relaunch/meetings/ops/2026-02-03-kickoff.transcript.md',
-    review_input: {
-      project_slug: 'pjr-relaunch',
-      project_scoped: true
-    }
-  });
-});
-
-test('relocate plan: a missing channel slug lands in the ohne-channel project folder', () => {
-  const workspaceRoot = path.resolve('virtual-ws');
-  const meeting = {
-    meeting_id: 'm2',
-    slug: 'lunch',
-    dateString: '2026-02-04',
-    channel_slug: null,
-    summary_path: 'memory/evidence/meetings/ohne-channel/2026-02-04-lunch.summary.md',
-    transcript_path: 'memory/evidence/meetings/ohne-channel/2026-02-04-lunch.transcript.md'
-  };
-  const plan = buildProjectRelocatePlan(meeting, { projectSlug: 'pjr-relaunch', workspaceRoot });
-  assert.equal(
-    plan.toPaths.summary,
-    path.join(workspaceRoot, 'memory', 'evidence', 'projects', 'pjr-relaunch', 'meetings', 'ohne-channel', '2026-02-04-lunch.summary.md')
-  );
-  assert.deepEqual(plan.entryUpdates.project_slugs, ['pjr-relaunch']);
-});
-
-test('relocate cli: moves a pool meeting into the project tree without orphans', (t) => {
-  const { workspaceRoot } = createWorkspaceFixture([]);
-  t.after(() => fs.rmSync(workspaceRoot, { recursive: true, force: true }));
-  const poolMeeting = {
-    meeting_id: 'pool-1',
-    title: 'Kickoff',
-    slug: 'kickoff',
-    dateString: '2026-02-03T10:00:00.000Z',
-    channel: 'Ops',
-    channel_slug: 'ops',
-    channels: ['Ops'],
-    project_slug: null,
-    project_slugs: [],
-    classification_status: 'unmapped',
-    review_recommended: true,
-    llm_review_status: 'pending',
-    summary_path: 'memory/evidence/meetings/ops/2026-02-03-kickoff.summary.md',
-    transcript_path: 'memory/evidence/meetings/ops/2026-02-03-kickoff.transcript.md',
-    review_input: { channel: 'Ops', channel_slug: 'ops', project_slug: null, review_recommended: true },
-    server_change_status: 'unchanged',
-    server_changed_since_last_sync: false,
-    first_synced_at: '2026-02-03T10:00:00.000Z',
-    last_synced_at: '2026-02-03T10:00:00.000Z'
-  };
-  const projectMeeting = {
-    meeting_id: 'proj-1',
-    title: 'Standup',
-    slug: 'standup',
-    dateString: '2026-02-02T09:00:00.000Z',
-    channel: 'Ops',
-    channel_slug: 'ops',
-    channels: ['Ops'],
-    project_slug: 'alpha',
-    project_slugs: ['alpha'],
-    project_scoped: true,
-    classification_status: 'unmapped',
-    review_recommended: true,
-    llm_review_status: 'pending',
-    summary_path: 'memory/evidence/projects/alpha/meetings/ops/2026-02-02-standup.summary.md',
-    transcript_path: 'memory/evidence/projects/alpha/meetings/ops/2026-02-02-standup.transcript.md',
-    review_input: { channel: 'Ops', channel_slug: 'ops', project_slug: 'alpha', review_recommended: true }
-  };
-  fs.writeFileSync(
-    path.join(workspaceRoot, 'memory', 'evidence', 'meetings', 'meetings.json'),
-    `${JSON.stringify({ channel_mappings: {}, meetings: [poolMeeting, projectMeeting] }, null, 2)}\n`,
-    'utf8'
-  );
-  writeMeetingFiles(workspaceRoot, poolMeeting);
-  writeMeetingFiles(workspaceRoot, projectMeeting);
-
-  const result = runRelocate(workspaceRoot, ['--meeting-id', 'pool-1', '--to-project', 'pjr-relaunch']);
-  assert.equal(result.status, 0, result.stderr);
-
-  const projectFolder = path.join(workspaceRoot, 'memory', 'evidence', 'projects', 'pjr-relaunch', 'meetings', 'ops');
-  const summaryTarget = path.join(projectFolder, '2026-02-03-kickoff.summary.md');
-  const transcriptTarget = path.join(projectFolder, '2026-02-03-kickoff.transcript.md');
-  assert.ok(fs.existsSync(summaryTarget), 'summary moved to project tree');
-  assert.ok(fs.existsSync(transcriptTarget), 'transcript moved to project tree');
-  assert.ok(!fs.existsSync(path.join(workspaceRoot, poolMeeting.summary_path)), 'pool summary is gone');
-  assert.ok(!fs.existsSync(path.join(workspaceRoot, poolMeeting.transcript_path)), 'pool transcript is gone');
-
-  const movedSummary = fs.readFileSync(summaryTarget, 'utf8');
-  assert.match(movedSummary, /summary_path: "memory\/evidence\/projects\/pjr-relaunch\/meetings\/ops\/2026-02-03-kickoff\.summary\.md"/);
-  assert.match(movedSummary, /project_slug: "pjr-relaunch"/);
-
-  const state = JSON.parse(fs.readFileSync(path.join(workspaceRoot, 'memory', 'evidence', 'meetings', 'meetings.json'), 'utf8'));
-  const moved = state.meetings.find((item) => item.meeting_id === 'pool-1');
-  const untouched = state.meetings.find((item) => item.meeting_id === 'proj-1');
-  assert.equal(moved.summary_path, 'memory/evidence/projects/pjr-relaunch/meetings/ops/2026-02-03-kickoff.summary.md');
-  assert.equal(moved.transcript_path, 'memory/evidence/projects/pjr-relaunch/meetings/ops/2026-02-03-kickoff.transcript.md');
-  assert.equal(moved.project_slug, 'pjr-relaunch');
-  assert.deepEqual(moved.project_slugs, ['pjr-relaunch']);
-  assert.equal(moved.project_scoped, true);
-  assert.equal(moved.channel_slug, 'ops');
-  assert.equal(moved.classification_status, 'unmapped');
-  assert.equal(moved.llm_review_status, 'pending');
-  assert.equal(moved.review_input.project_slug, 'pjr-relaunch');
-  assert.equal(moved.review_input.project_scoped, true);
-  assert.deepEqual(untouched, projectMeeting);
-});
-
-test('relocate cli: an existing target file fails loud and leaves the source in place', (t) => {
-  const { workspaceRoot } = createWorkspaceFixture([]);
-  t.after(() => fs.rmSync(workspaceRoot, { recursive: true, force: true }));
-  const poolMeeting = {
-    meeting_id: 'pool-1',
-    title: 'Kickoff',
-    slug: 'kickoff',
-    dateString: '2026-02-03T10:00:00.000Z',
-    channel: 'Ops',
-    channel_slug: 'ops',
-    channels: ['Ops'],
-    project_slug: null,
-    project_slugs: [],
-    classification_status: 'unmapped',
-    review_recommended: true,
-    llm_review_status: 'pending',
-    summary_path: 'memory/evidence/meetings/ops/2026-02-03-kickoff.summary.md',
-    transcript_path: 'memory/evidence/meetings/ops/2026-02-03-kickoff.transcript.md',
-    review_input: { project_slug: null }
-  };
-  fs.writeFileSync(
-    path.join(workspaceRoot, 'memory', 'evidence', 'meetings', 'meetings.json'),
-    `${JSON.stringify({ channel_mappings: {}, meetings: [poolMeeting] }, null, 2)}\n`,
-    'utf8'
-  );
-  writeMeetingFiles(workspaceRoot, poolMeeting);
-  const projectFolder = path.join(workspaceRoot, 'memory', 'evidence', 'projects', 'pjr-relaunch', 'meetings', 'ops');
-  fs.mkdirSync(projectFolder, { recursive: true });
-  const collidingTarget = path.join(projectFolder, '2026-02-03-kickoff.summary.md');
-  fs.writeFileSync(collidingTarget, 'occupied', 'utf8');
-
-  const result = runRelocate(workspaceRoot, ['--meeting-id', 'pool-1', '--to-project', 'pjr-relaunch']);
-  assert.equal(result.status, 1);
-  assert.match(result.stderr, /target_file_exists:/);
-  assert.ok(fs.existsSync(path.join(workspaceRoot, poolMeeting.summary_path)), 'source summary stays');
-  assert.ok(fs.existsSync(path.join(workspaceRoot, poolMeeting.transcript_path)), 'source transcript stays');
-  assert.equal(fs.readFileSync(collidingTarget, 'utf8'), 'occupied');
-  const state = JSON.parse(fs.readFileSync(path.join(workspaceRoot, 'memory', 'evidence', 'meetings', 'meetings.json'), 'utf8'));
-  assert.equal(state.meetings[0].summary_path, 'memory/evidence/meetings/ops/2026-02-03-kickoff.summary.md');
-});
-
-test('relocate cli: --to-project alone satisfies usage while the classic path still does too', (t) => {
-  const { workspaceRoot } = createWorkspaceFixture([]);
-  t.after(() => fs.rmSync(workspaceRoot, { recursive: true, force: true }));
-
-  const projectOnly = runRelocate(workspaceRoot, ['--meeting-id', 'missing', '--to-project', 'pjr-relaunch']);
-  assert.equal(projectOnly.status, 1);
-  assert.match(projectOnly.stderr, /meeting_not_found/);
-
-  const classic = runRelocate(workspaceRoot, [
-    '--meeting-id', 'missing',
-    '--from-slug', 'ops',
-    '--to-slug', 'ops-2',
-    '--to-title', 'Ops 2',
-    '--topic-slug', 'topic',
-    '--resolved-at', '2026-02-03T10:00:00.000Z'
-  ]);
-  assert.equal(classic.status, 1);
-  assert.match(classic.stderr, /meeting_not_found/);
-
-  const neither = runRelocate(workspaceRoot, ['--meeting-id', 'missing']);
-  assert.equal(neither.status, 2);
-  assert.match(neither.stderr, /usage:/);
-
-  const noMeetingId = runRelocate(workspaceRoot, ['--to-project', 'pjr-relaunch']);
-  assert.equal(noMeetingId.status, 2);
-  assert.match(noMeetingId.stderr, /usage:/);
-});
-
-test('relocate plan: a raw path-escape project slug is slugified under projects/ and cannot leave the tree', () => {
-  const workspaceRoot = path.resolve('virtual-ws');
-  const meeting = {
-    meeting_id: 'm4',
-    slug: 'kickoff',
-    dateString: '2026-02-06',
-    channel_slug: 'ops',
-    summary_path: 'memory/evidence/meetings/ops/2026-02-06-kickoff.summary.md',
-    transcript_path: 'memory/evidence/meetings/ops/2026-02-06-kickoff.transcript.md'
-  };
-  const plan = buildProjectRelocatePlan(meeting, { projectSlug: '../posed-target', workspaceRoot });
-  const projectFolder = path.join(workspaceRoot, 'memory', 'evidence', 'projects', 'posed-target', 'meetings', 'ops');
-  assert.equal(plan.entryUpdates.project_slug, 'posed-target');
-  assert.equal(plan.toPaths.summary, path.join(projectFolder, '2026-02-06-kickoff.summary.md'));
-  assert.equal(plan.toPaths.transcript, path.join(projectFolder, '2026-02-06-kickoff.transcript.md'));
-  assert.ok(plan.entryUpdates.summary_path.startsWith('memory/evidence/projects/posed-target/'));
-  assert.equal(plan.entryUpdates.project_slugs.includes('..'), false);
-});
-
-test('relocate plan: project slug normalization matches the sync slugify convention', () => {
-  assert.equal(slugify('PJR Relaunch'), 'pjr-relaunch');
-  assert.equal(slugify('---'), 'ohne-channel');
-  const workspaceRoot = path.resolve('virtual-ws');
-  const meeting = {
-    meeting_id: 'm5',
-    slug: 'kickoff',
-    dateString: '2026-02-07',
-    channel_slug: 'ops',
-    summary_path: 'memory/evidence/meetings/ops/2026-02-07-kickoff.summary.md',
-    transcript_path: 'memory/evidence/meetings/ops/2026-02-07-kickoff.transcript.md'
-  };
-  const plan = buildProjectRelocatePlan(meeting, { projectSlug: 'PJR Relaunch', workspaceRoot });
-  assert.equal(plan.entryUpdates.project_slug, 'pjr-relaunch');
-  assert.deepEqual(plan.entryUpdates.project_slugs, ['pjr-relaunch']);
-  assert.equal(
-    plan.toPaths.summary,
-    path.join(workspaceRoot, 'memory', 'evidence', 'projects', 'pjr-relaunch', 'meetings', 'ops', '2026-02-07-kickoff.summary.md')
-  );
-});
-
-test('relocate plan: re-relocating drops the previous project tree while keeping sibling memberships', () => {
-  const workspaceRoot = path.resolve('virtual-ws');
-  const meeting = {
-    meeting_id: 'm6',
-    slug: 'standup',
-    dateString: '2026-02-08',
-    channel_slug: 'ops',
-    project_slug: 'alpha',
-    project_scoped: true,
-    project_slugs: ['alpha', 'beta'],
-    summary_path: 'memory/evidence/projects/alpha/meetings/ops/2026-02-08-standup.summary.md',
-    transcript_path: 'memory/evidence/projects/alpha/meetings/ops/2026-02-08-standup.transcript.md'
-  };
-  const plan = buildProjectRelocatePlan(meeting, { projectSlug: 'pjr', workspaceRoot });
-  assert.equal(plan.entryUpdates.project_slug, 'pjr');
-  assert.deepEqual(plan.entryUpdates.project_slugs, ['beta', 'pjr']);
-});
-
-test('relocate plan: empty or empty-normalizing project slugs fail loud as empty_project_slug', () => {
-  const workspaceRoot = path.resolve('virtual-ws');
-  const meeting = {
-    meeting_id: 'm7',
-    slug: 'kickoff',
-    dateString: '2026-02-09',
-    channel_slug: 'ops',
-    summary_path: 'memory/evidence/meetings/ops/2026-02-09-kickoff.summary.md',
-    transcript_path: 'memory/evidence/meetings/ops/2026-02-09-kickoff.transcript.md'
-  };
-  for (const rawSlug of ['', '---', '   ', '&&&']) {
+test('sync args: explicit empty or empty-normalizing route values fail loud before any API call', () => {
+  for (const value of ['', '---', '   ']) {
     assert.throws(
-      () => buildProjectRelocatePlan(meeting, { projectSlug: rawSlug, workspaceRoot }),
+      () => resolveRouting(parseSyncArgs(['--project-slug', value])),
       /empty_project_slug:/,
-      `expected empty_project_slug for ${JSON.stringify(rawSlug)}`
+      `project ${JSON.stringify(value)} must be rejected`
     );
   }
+  assert.throws(
+    () => resolveRouting(parseSyncArgs(['--project-slug', 'ohne-channel'])),
+    /empty_project_slug:ohne-channel/
+  );
 });
 
-test('relocate plan: a valid project slug is still accepted unchanged', () => {
-  const workspaceRoot = path.resolve('virtual-ws');
-  const meeting = {
-    meeting_id: 'm8',
-    slug: 'kickoff',
-    dateString: '2026-02-10',
-    channel_slug: 'ops',
-    summary_path: 'memory/evidence/meetings/ops/2026-02-10-kickoff.summary.md',
-    transcript_path: 'memory/evidence/meetings/ops/2026-02-10-kickoff.transcript.md'
-  };
-  const plan = buildProjectRelocatePlan(meeting, { projectSlug: 'pjr-relaunch', workspaceRoot });
-  assert.equal(plan.entryUpdates.project_slug, 'pjr-relaunch');
+test('sync args: a flag following --project-slug is rejected as a missing value', () => {
+  assert.throws(() => parseSyncArgs(['--project-slug', '--limit']), /missing value for --project-slug/);
 });
 
-test('relocate cli: --to-project combined with the classic flags fails loud', (t) => {
-  const { workspaceRoot } = createWorkspaceFixture([]);
-  t.after(() => fs.rmSync(workspaceRoot, { recursive: true, force: true }));
-
-  const result = runRelocate(workspaceRoot, [
-    '--meeting-id', 'pool-1',
-    '--to-project', 'pjr-relaunch',
-    '--from-slug', 'ops',
-    '--to-slug', 'ops-2',
-    '--to-title', 'Ops 2',
-    '--topic-slug', 'topic',
-    '--resolved-at', '2026-02-03T10:00:00.000Z'
+test('sync args: writer transport configuration is explicit and never taken from a route value', () => {
+  const args = parseSyncArgs([
+    '--meeting-writer', 'C:/trusted/ingest_meeting.py',
+    '--python', 'C:/trusted/python.exe',
+    '--workspace-lock-root', 'C:/trusted/skills',
+    '--lease-id', 'lease-1',
+    '--conversation-id', 'conv-1'
   ]);
-  assert.equal(result.status, 2, result.stderr);
-  assert.match(result.stderr, /mutually_exclusive_flags:project_and_channel_relocation/);
+  assert.equal(args.meetingWriter, 'C:/trusted/ingest_meeting.py');
+  assert.equal(args.python, 'C:/trusted/python.exe');
+  assert.equal(args.workspaceLockRoot, 'C:/trusted/skills');
+  assert.equal(args.leaseId, 'lease-1');
+  assert.equal(args.conversationId, 'conv-1');
 });
 
-test('sync cli: an empty-normalizing project slug fails loud before any request', (t) => {
-  const { workspaceRoot } = createWorkspaceFixture([]);
-  t.after(() => fs.rmSync(workspaceRoot, { recursive: true, force: true }));
+test('registry: a missing register is distinguishable from a corrupt one', (t) => {
+  const workspace = createWorkspace(t);
+  const missing = readRegistryFile(workspace.registryPath);
+  assert.equal(missing.exists, false);
+  assert.deepEqual(missing.document, { meetings: [] });
 
-  const result = runSync(workspaceRoot, ['--project-slug', '---', '--limit', '1']);
-  assert.equal(result.status, 2, result.stderr);
-  assert.match(result.stderr, /empty_project_slug:---/);
+  fs.writeFileSync(workspace.registryPath, '{ broken', 'utf8');
+  assert.throws(() => readRegistryFile(workspace.registryPath), /registry_invalid_json/);
 });
 
-test('sync cli: an empty project slug value fails loud before any request', (t) => {
-  const { workspaceRoot } = createWorkspaceFixture([]);
-  t.after(() => fs.rmSync(workspaceRoot, { recursive: true, force: true }));
+test('registry: a bare legacy array fails instead of being reset or silently converted', (t) => {
+  const workspace = createWorkspace(t);
+  fs.writeFileSync(workspace.registryPath, '[]', 'utf8');
+  assert.throws(() => readRegistryFile(workspace.registryPath), /registry_legacy_array_unsupported/);
 
-  const result = runSync(workspaceRoot, ['--project-slug', '', '--limit', '1']);
-  assert.equal(result.status, 2, result.stderr);
-  assert.match(result.stderr, /empty_project_slug:/);
+  fs.writeFileSync(workspace.registryPath, '{"meetings": {}}', 'utf8');
+  assert.throws(() => readRegistryFile(workspace.registryPath), /registry_meetings_not_array/);
 });
 
-test('sync cli: a flag following --project-slug is rejected as a missing value', (t) => {
-  const { workspaceRoot } = createWorkspaceFixture([]);
-  t.after(() => fs.rmSync(workspaceRoot, { recursive: true, force: true }));
-
-  const result = runSync(workspaceRoot, ['--project-slug', '--limit']);
-  assert.equal(result.status, 2, result.stderr);
-  assert.match(result.stderr, /missing value for --project-slug/);
-});
-
-test('relocate cli: a failed second move never applies frontmatter to a moved file', (t) => {
-  const { workspaceRoot } = createWorkspaceFixture([]);
-  t.after(() => fs.rmSync(workspaceRoot, { recursive: true, force: true }));
-  const sharedPath = 'memory/evidence/meetings/ops/2026-02-03-kickoff.summary.md';
-  const poolMeeting = {
-    meeting_id: 'pool-1',
-    title: 'Kickoff',
-    slug: 'kickoff',
-    dateString: '2026-02-03T10:00:00.000Z',
-    channel: 'Ops',
-    channel_slug: 'ops',
-    channels: ['Ops'],
-    project_slug: null,
-    project_slugs: [],
-    classification_status: 'unmapped',
-    review_recommended: true,
-    llm_review_status: 'pending',
-    summary_path: sharedPath,
-    transcript_path: sharedPath,
-    review_input: { project_slug: null },
-    server_change_status: 'unchanged',
-    server_changed_since_last_sync: false
-  };
+test('registry: a canonical object keeps unknown root metadata for the writer', (t) => {
+  const workspace = createWorkspace(t);
   fs.writeFileSync(
-    path.join(workspaceRoot, 'memory', 'evidence', 'meetings', 'meetings.json'),
-    `${JSON.stringify({ channel_mappings: {}, meetings: [poolMeeting] }, null, 2)}\n`,
+    workspace.registryPath,
+    `${JSON.stringify({ meetings: [{ meeting_id: 'm1' }], channel_strategy: { mode: 'scarce_channels' }, future_root: { keep: true } }, null, 2)}\n`,
     'utf8'
   );
-  const sourceAbs = path.join(workspaceRoot, sharedPath);
-  fs.mkdirSync(path.dirname(sourceAbs), { recursive: true });
-  fs.writeFileSync(sourceAbs, [
-    '---',
-    'meeting_id: "pool-1"',
-    `summary_path: "${sharedPath}"`,
-    `transcript_path: "${sharedPath}"`,
-    'project_slug: null',
-    '---',
-    '# Kickoff',
-    ''
-  ].join('\n'), 'utf8');
-
-  const result = runRelocate(workspaceRoot, ['--meeting-id', 'pool-1', '--to-project', 'pjr-relaunch']);
-  assert.equal(result.status, 1, result.stderr);
-  assert.match(result.stderr, /source_file_missing:/);
-
-  const projectFolder = path.join(workspaceRoot, 'memory', 'evidence', 'projects', 'pjr-relaunch', 'meetings', 'ops');
-  const movedSummary = fs.readFileSync(path.join(projectFolder, '2026-02-03-kickoff.summary.md'), 'utf8');
-  assert.doesNotMatch(movedSummary, /project_slug: "pjr-relaunch"/);
-  assert.match(movedSummary, /project_slug: null/);
-  assert.equal(fs.existsSync(path.join(projectFolder, '2026-02-03-kickoff.transcript.md')), false);
-
-  const state = JSON.parse(fs.readFileSync(path.join(workspaceRoot, 'memory', 'evidence', 'meetings', 'meetings.json'), 'utf8'));
-  assert.equal(state.meetings[0].summary_path, sharedPath);
-  assert.equal(state.meetings[0].transcript_path, sharedPath);
-  assert.equal(state.meetings[0].project_slug, null);
+  const result = readRegistryFile(workspace.registryPath);
+  assert.equal(result.exists, true);
+  assert.deepEqual(result.document.future_root, { keep: true });
+  assert.deepEqual(result.document.channel_strategy, { mode: 'scarce_channels' });
+  assert.equal(result.document.meetings.length, 1);
 });
 
-test('relocate cli: an empty-normalizing target project exits 2 as a usage error', (t) => {
-  const { workspaceRoot } = createWorkspaceFixture([
-    {
-      meeting_id: 'pool-1',
-      title: 'Kickoff',
-      slug: 'kickoff',
-      dateString: '2026-02-03T10:00:00.000Z',
-      channel_slug: 'ops',
-      summary_path: 'memory/evidence/meetings/ops/2026-02-03-kickoff.summary.md',
-      transcript_path: 'memory/evidence/meetings/ops/2026-02-03-kickoff.transcript.md'
-    }
-  ]);
-  t.after(() => fs.rmSync(workspaceRoot, { recursive: true, force: true }));
+test('sync cli: a missing project route reaches writer configuration instead of empty_project_slug', (t) => {
+  const workspace = createWorkspace(t);
+  const result = runSyncCli(workspace.workspaceRoot, ['--limit', '1']);
 
-  const result = runRelocate(workspaceRoot, ['--meeting-id', 'pool-1', '--to-project', 'ohne-channel']);
   assert.equal(result.status, 2, result.stderr);
-  assert.match(result.stderr, /empty_project_slug:ohne-channel/);
+  assert.match(result.stderr, /missing_writer_config/);
+  assert.doesNotMatch(result.stderr, /empty_project_slug/);
+  assert.doesNotMatch(result.stderr, /missing_secrets_file/);
+});
+
+test('sync cli: a corrupt registry is rejected after capabilities but before any list API call', (t) => {
+  const workspace = createWorkspace(t);
+  fs.writeFileSync(workspace.registryPath, '[]', 'utf8');
+  const writer = writeFakeWriter(workspace.workspaceRoot);
+  const result = runSyncCli(workspace.workspaceRoot, [
+    '--limit', '1',
+    '--meeting-writer', writer,
+    '--python', process.execPath,
+    '--workspace-lock-root', workspace.workspaceRoot,
+    '--lease-id', 'lease-1'
+  ]);
+
+  assert.equal(result.status, 2, result.stderr);
+  assert.match(result.stderr, /registry_legacy_array_unsupported/);
+  assert.doesNotMatch(result.stderr, /missing_secrets_file/);
+});
+
+test('sync cli: capabilities fail closed before the registry or any live API is touched', (t) => {
+  const workspace = createWorkspace(t);
+  fs.writeFileSync(workspace.registryPath, '[]', 'utf8');
+  const writer = writeFakeWriter(workspace.workspaceRoot, 2);
+  const result = runSyncCli(workspace.workspaceRoot, [
+    '--limit', '1',
+    '--meeting-writer', writer,
+    '--python', process.execPath,
+    '--workspace-lock-root', workspace.workspaceRoot,
+    '--lease-id', 'lease-1'
+  ]);
+
+  assert.equal(result.status, 2, result.stderr);
+  assert.match(result.stderr, /capabilities/);
+  assert.doesNotMatch(result.stderr, /registry_legacy_array_unsupported/);
+  assert.doesNotMatch(result.stderr, /missing_secrets_file/);
+});
+
+test('sync cli: explicit empty project values still fail as usage errors before writer setup', (t) => {
+  const workspace = createWorkspace(t);
+  const result = runSyncCli(workspace.workspaceRoot, ['--project-slug', '---', '--limit', '1']);
+
+  assert.equal(result.status, 2, result.stderr);
+  assert.match(result.stderr, /empty_project_slug:---/);
+  assert.doesNotMatch(result.stderr, /missing_writer_config/);
+});
+
+test('sync cli: the old relocate command is no longer part of the adapter surface', () => {
+  const relocate = fileURLToPath(new URL('../scripts/relocate-local-meeting.mjs', import.meta.url));
+  assert.equal(fs.existsSync(relocate), false);
+});
+
+function baseMeeting(overrides = {}) {
+  return {
+    id: 'cli-meet-1',
+    title: 'CLI Kickoff',
+    date: 1776757200000,
+    dateString: '2026-04-21T07:40:00.000Z',
+    duration: 15,
+    participants: ['a@example.com'],
+    speakers: [],
+    channels: [{ id: 'c1', title: 'Ops' }],
+    summary: { overview: 'Overview' },
+    sentences: [{ text: 'Hello', raw_text: 'Hello', speaker_name: 'Ada', start_time: 0 }],
+    ...overrides
+  };
+}
+
+function writeStubWriter(dir) {
+  const writer = path.join(dir, 'stub_ingest_meeting.mjs');
+  fs.writeFileSync(writer, '// exists only so trusted writer-config validation passes\n', 'utf8');
+  return writer;
+}
+
+test('sync function: no routing still delegates a valid unmapped record through the writer boundary', async (t) => {
+  const workspace = createWorkspace(t);
+  const writerFile = writeStubWriter(workspace.workspaceRoot);
+  const meeting = baseMeeting();
+  const calls = [];
+  const writer = {
+    async ingestRecord(record, options) {
+      calls.push({ record, options });
+      return {
+        entry: { meeting_id: record.meeting_id },
+        meeting_id: record.meeting_id,
+        paths: { summary: 'memory/evidence/meetings/ops/summary.md' },
+        changed: true
+      };
+    }
+  };
+  const graph = async ({ variables }) => {
+    if (variables?.transcriptId) return { transcript: meeting };
+    return { transcripts: [{ id: meeting.id, title: meeting.title }] };
+  };
+
+  const result = await runSync({
+    argv: [
+      '--limit', '1',
+      '--meeting-writer', writerFile,
+      '--python', process.execPath,
+      '--workspace-lock-root', workspace.workspaceRoot,
+      '--lease-id', 'lease-1'
+    ],
+    graph,
+    writer,
+    workspaceRoot: workspace.workspaceRoot,
+    settings: {},
+    env: {}
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.envelope.ok, true);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].options.route, { topic: null, project: null, event: null });
+  assert.equal(calls[0].record.schema, 'meeting-record/1');
+  assert.equal(calls[0].record.classification_hint.project_slug, null);
+  assert.equal(fs.existsSync(workspace.registryPath), false, 'sync itself never creates a register');
+});
+
+test('sync function: a register-bound account with an unknown current account stops before API and writer', async (t) => {
+  const workspace = createWorkspace(t);
+  const writerFile = writeStubWriter(workspace.workspaceRoot);
+  fs.writeFileSync(workspace.registryPath, `${JSON.stringify({
+    channel_mappings: {},
+    meetings: [{
+      meeting_id: 'cli-meet-1',
+      source: {
+        system: 'fireflies',
+        external_id: 'cli-meet-1',
+        account_ref: 'owner@example.com'
+      }
+    }]
+  }, null, 2)}\n`, 'utf8');
+  let graphCalls = 0;
+  let writerCalls = 0;
+  const graph = async () => {
+    graphCalls += 1;
+    throw new Error('api_must_not_be_called');
+  };
+  const writer = {
+    async ingestRecord(record) {
+      writerCalls += 1;
+      return { entry: {}, meeting_id: record.meeting_id, paths: {}, changed: true };
+    }
+  };
+
+  const result = await runSync({
+    argv: [
+      '--meeting-id', 'cli-meet-1',
+      '--meeting-writer', writerFile,
+      '--python', process.execPath,
+      '--workspace-lock-root', workspace.workspaceRoot,
+      '--lease-id', 'lease-1'
+    ],
+    graph,
+    writer,
+    workspaceRoot: workspace.workspaceRoot,
+    settings: {},
+    env: {}
+  });
+
+  assert.equal(result.exitCode, 2);
+  assert.equal(result.envelope.ok, false);
+  assert.equal(result.envelope.failed, 1);
+  assert.match(result.envelope.failures[0].error.message, /unresolved_account_binding/);
+  assert.equal(graphCalls, 0, 'no list or detail API may run before registry account preflight');
+  assert.equal(writerCalls, 0, 'no writer call is allowed for an unresolved account binding');
+});
+
+test('sync function: an explicit project route is forwarded without becoming a classification approval', async (t) => {
+  const workspace = createWorkspace(t);
+  const writerFile = writeStubWriter(workspace.workspaceRoot);
+  const meeting = baseMeeting();
+  const calls = [];
+  const writer = {
+    async ingestRecord(record, options) {
+      calls.push({ record, options });
+      return {
+        entry: { meeting_id: record.meeting_id },
+        meeting_id: record.meeting_id,
+        paths: {},
+        changed: true
+      };
+    }
+  };
+  const graph = async ({ variables }) => {
+    if (variables?.transcriptId) return { transcript: meeting };
+    return { transcripts: [{ id: meeting.id, title: meeting.title }] };
+  };
+
+  const result = await runSync({
+    argv: [
+      '--limit', '1',
+      '--project', 'pjr-relaunch',
+      '--meeting-writer', writerFile,
+      '--python', process.execPath,
+      '--workspace-lock-root', workspace.workspaceRoot,
+      '--lease-id', 'lease-1'
+    ],
+    graph,
+    writer,
+    workspaceRoot: workspace.workspaceRoot,
+    settings: {},
+    env: {}
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.deepEqual(calls[0].options.route, { topic: null, project: 'pjr-relaunch', event: null });
+  assert.equal(calls[0].record.classification_hint.project_slug, null);
+  assert.equal(calls[0].record.review.recommended, true);
 });

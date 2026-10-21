@@ -13,12 +13,12 @@ Für die aktuelle Fireflies-Free-Nutzung gilt lokal die Annahme:
 - beim Sync wird der für den jeweiligen Arbeitskontext relevante Channel als Parameter übergeben
 - dieser Channel dient nur als Sammel- und Intake-Channel für den jeweiligen Kontext
 - Fireflies-Channels sind keine belastbare Projekt- oder Topic-Taxonomie
-- die fachliche Zuordnung erfolgt nachgelagert pro Meeting lokal in `memory/references/meetings/`
+- die fachliche Zuordnung erfolgt nachgelagert über den kanonischen Writer, nicht im Adapter
 
 Konsequenz:
 - Channel = grober Container
-- lokales Meeting-Modell = Source of Truth für spätere Projekt-/Topic-Klassifikation
-- der Sync selbst ist Intake, Spiegelung und Änderungs-Erkennung, nicht fachliche Endklassifikation
+- der Writer-/Registerzustand ist Source of Truth für spätere Projekt-/Topic-Klassifikation
+- der Adapter liefert nur `meeting-record/1`; Channel-Evidenz reist inert in `source_metadata`, nicht als Klassifikation
 
 ## Channel-Schema
 
@@ -49,17 +49,18 @@ Konsequenz:
 ### Kanal → Context-Intake-Regel
 
 - der beim Sync übergebene Context-Channel
-  - Regel: Meetings werden für diesen Kontext eingesammelt und lokal gespiegelt
+  - Regel: Meetings werden für diesen Kontext eingesammelt und als Records an den Writer gegeben
   - Routing Mode: initial `unmapped`
-  - Notiz: fachliche Zuordnung zu Projekt und/oder Topic erfolgt erst nachgelagert
+  - Notiz: fachliche Zuordnung zu Projekt und/oder Topic erfolgt erst nachgelagert über den Writer
 
 ## Empfehlung für Routing
 
 - Verwende Channels primär als groben Intake- und Relevanzfilter.
 - Behandle den jeweils übergebenen Context-Channel als Inbox für den aktuellen Arbeitskontext, nicht als Projekt- oder Topic-Etikett.
 - Verzichte auf künstliche Channel-Rollenlogik; für den aktuellen Betrieb reicht ein generischer Inbox-Charakter.
-- Führe Projekt-/Topic-Klassifikation erst nach dem Sync durch.
-- Inhalt schlägt Channel; die lokale Meeting-Klassifikation schlägt jede bloße Channel-Namensähnlichkeit.
+- Führe Projekt-/Topic-Klassifikation erst nach dem Sync über den Writer durch.
+- Inhalt schlägt Channel; die validierte Operator-/Katalogentscheidung schlägt jede bloße Channel-Namensähnlichkeit.
+- Der Adapter setzt niemals `project_slug`/`topic_slug` und schreibt kein Register.
 
 ## Quellen
 

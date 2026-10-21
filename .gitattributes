@@ -1,0 +1,2 @@
+# Vendored canonical fixture must stay byte-identical on every checkout.
+tests/fixtures/*.json -text

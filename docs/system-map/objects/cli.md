@@ -4,8 +4,8 @@ cluster: adapter
 universe: live
 status: verified
 entity: scripts/get-meeting.mjs
-verified_at: 2026-10-03
-revision: 3b90b8f8ae06a0e6d99ea69d68fc4982db4edf31
+verified_at: 2026-10-21
+revision: c8c22cc+oi35-working-tree
 ---
 
 # CLI
@@ -13,28 +13,31 @@ revision: 3b90b8f8ae06a0e6d99ea69d68fc4982db4edf31
 Dünne CLI-Skripte über dem gemeinsamen Client; jeder Aufruf ist ein JSON-Envelope auf stdout bzw. stderr.
 
 ## Why this shape
-Skripte bleiben austauschbare Adapter; Argument-Parsing und Fehler-Semantik folgen einem gemeinsamen Muster.
+Skripte bleiben austauschbare Adapter; Argument-Parsing und Fehler-Semantik folgen einem gemeinsamen Muster. Seit OI #35 trennt die CLI strikt zwischen flüchtiger stdout-Ausgabe, explizitem Record-Export und delegierendem Sync.
 
 ## Shape
-`get-meeting.mjs` holt ein Meeting und gibt `{ok, mode, meeting}` als JSON aus. Modi: `--mode minimal|full|sentences-only` (Fehler `mode_must_be_minimal_full_or_sentences_only`), `--format json|markdown` (Fehler `format_must_be_json_or_markdown`), `--sentences-only` (Flag erzwingt den sentences-only-Modus). Auto-Default: `--format markdown` ohne explizites `--mode` und ohne `--sentences-only` resolvliert den Modus automatisch zu `sentences-only`; ein explizits gesetztes `--mode` gewinnt jederzeit (Tracking über `modeExplicit`). `--format markdown` rendert timestamped Speaker-Dialog (`[mm:ss] Speaker`, Speaker-Fallback `Unknown Speaker`, Fallback auf `raw_text`, leerer Sentences-Fall → Platzhaltertext), `--output <file>` schreibt das Resultat in eine Datei und bestätigt auf stdout mit kurzem Envelope `{ok, mode, format, output}`. Fail-loud-Absicherungen: fehlende, `''`-leere oder `--`-beginnende Werte an Wert-Flags werfen `missing value for <flag>`; überzählige positionale Argumente werfen `unexpected_positional_argument:<arg>`; Nutzungsfehler exit 2, API-Fehler exit 1. Alle Fehlerpfade setzen `process.exitCode` statt `process.exit`, damit der Event-Loop drainen kann (libuv-Assertion-Crash auf Windows/Node 24 vermieden). Dual-Evidence-Optionen: `--with-frontmatter` prepended einen CLI-Frontmatter-Block (`id`, `title`, `date` = dateString-Fallback, `duration_minutes`, `participants`, `source: "fireflies.ai"`, `type: "meeting-transcript"`; YAML-Strings JSON-quoted, Fehlende als null/[]) — nur bei `--format markdown` wirksam, sonst `frontmatter_requires_markdown_format` (exit 2); wenn der effektive Modus `sentences-only` ist und kein explizites `--mode` gesetzt ist, resolvliert die Kaskade (`resolveGetMeetingMode`) auf `full`, weil der Frontmatter-Metadatenbedarf den vollen Feldkatalog benötigt. `--speaker-map <mapping>` akzeptiert KV-Paare (`0=Dr. X,1=Martin`) oder JSON; `parseSpeakerMap` normalisiert auf byId/byName (numerische Keys mit Vorrang vor abgeleiteten `Speaker N`-Keys, Duplikat-Keys: letzter gewinnt) und wirft fail-loud (`invalid_speaker_map_json`, `invalid_speaker_map_entry`, `speaker_map_empty_value`); das Rendering resolvliert pro Sentence `speaker_id` → `speaker_name` → Original-Label. Bei `--format json` ist `--speaker-map` ein stiller No-op. `list-meetings.mjs` listet mit Pagination (limit 1–50, skip ≥ 0) und Optionalfiltern sowie `{ok, query, count, meetings}`. `list-channels.mjs` gibt `{ok, count, channels}` aus. `probe-meeting-capabilities.mjs` prüft read-only, welche Felder im Account befüllt sind: `--include-summary` fragt den Summary-Block an, `--include-paid-fields` optiert die planabhängigen Felder (`audio_url`, `video_url`, `analytics`) ein — die Standard-Probe fragt sie NICHT an, weil Fireflies auf dem Free-Plan die gesamte Query mit `paid_required` abbricht; nicht abgefragte Capabilities werden als `null` gekennzeichnet (statt `false` zu behaupten). Die Query-/Capabilities-Komposition lebt als reine Funktionen (`buildProbeQuery`, `buildProbeCapabilities`) in [scripts/_fireflies-meetings.mjs](../../../scripts/_fireflies-meetings.mjs). Alle Argument-Parser sind handgeschrieben ohne Dependencies.
+`get-meeting.mjs` holt ein Meeting. Modi: `--mode minimal|full|sentences-only` (Fehler `mode_must_be_minimal_full_or_sentences_only`), `--format json|markdown` (`format_must_be_json_or_markdown`), `--sentences-only`. Auto-Default: `--format markdown` ohne explizites `--mode` wird `sentences-only`; explizites `--mode` gewinnt. `--format markdown` rendert den timestamped Speaker-Dialog, `--speaker-map` mappt IDs/Namen, `--with-frontmatter` prepended den schlanken CLI-Frontmatter-Block nur auf stdout. Wert-Flags weisen fehlende, `''`-leere oder `--`-beginnende Werte als `missing value for <flag>` ab; überzählige Positionalargumente sind `unexpected_positional_argument:<arg>`; Nutzungsfehler exit 2, API-Fehler exit 1. Fehlerpfade setzen `process.exitCode` statt `process.exit`.
 
-- [scripts/get-meeting.mjs](../../../scripts/get-meeting.mjs) — `scripts/get-meeting.mjs:1`
-- [scripts/list-meetings.mjs](../../../scripts/list-meetings.mjs) — `scripts/list-meetings.mjs:1`
-- [scripts/list-channels.mjs](../../../scripts/list-channels.mjs) — `scripts/list-channels.mjs:1`
-- [scripts/probe-meeting-capabilities.mjs](../../../scripts/probe-meeting-capabilities.mjs) — `scripts/probe-meeting-capabilities.mjs:1`
-- [scripts/sync-meetings-to-memory.mjs](../../../scripts/sync-meetings-to-memory.mjs) — `scripts/sync-meetings-to-memory.mjs:50` (parseArgs)
+Dateiausgabe ist bewusst kein Markdown-Sidecar: `--output` muss auf `.meeting-export.json` enden, `--format json` verwenden und zusätzlich `--lease-id` plus `--workspace-lock-root` tragen (`output_must_end_with_meeting_export_json`, `output_requires_json_record_export`, `output_requires_lease_id`, `output_requires_workspace_lock_root`). `resolveRecordExportTarget` prüft `<workspace>/data/` per realpath (Pfad-, Symlink-/Junction-Flucht, fehlende Zone/Eltern) **vor** Credentials/API. `exportMeetingRecord` importiert den Shared Guard `workspace_lock_guard.py` in place über einen Python-Kindprozess und ruft `require_workspace_lock(..., allow_legacy=False)` auf; es werden keine Ownership-Regeln nachgebaut. Guard + Pfad laufen vor Credentials/API, vor dem Staging und unmittelbar vor der create-only-Publikation. Freigabe/Ersatz der Lease nach Fetch oder Staging hinterlässt weder Export noch Temp-Datei; die letzte Prüfung bis zum atomaren Create bleibt eine kooperative Race-Grenze. Die deklarierte Lease-ID ist keine kryptografische Aufruferidentität. Der Export nutzt immer den vollen Feldkatalog, baut einen validierten `meeting-record/1`-Record und schreibt ihn no-clobber (`output_exists_no_clobber`) über eine Temp-Datei im selben `data/`-Verzeichnis. Es entsteht kein unregistriertes Summary-/Transcript-Paar.
 
-Frontmatter-Hinweis: Der CLI-Frontmatter-Block (`buildCliFrontmatter` in [scripts/_fireflies-meetings.mjs](../../../scripts/_fireflies-meetings.mjs)) ist ein schlanker Export-Dialekt für One-Shot-Abnahmen; der reiche Sync-Dialekt gemäß [references/data-model.md](../../../references/data-model.md) bleibt maßgeblich für Meeting-Ablagen im Sync.
+`list-meetings.mjs` listet mit Pagination (limit 1-50, skip = 0), Optionalfiltern und `{ok, query, count, meetings}`. `list-channels.mjs` gibt `{ok, count, channels}` aus. `probe-meeting-capabilities.mjs` prüft read-only; `--include-summary` fragt den Summary-Block an, `--include-paid-fields` optiert planabhängige Felder ein, nicht abgefragte Capabilities sind `null`. `sync-meetings-to-memory.mjs` ist ein delegierender Einstieg: `--project`/`--topic`/`--event` (plus `-slug`-Aliase) gehen an den Writer, `--meeting-writer`/`--python`/`--workspace-lock-root`/`--lease-id` konfigurieren den Trusted Transport. Ohne Routing ist der Lauf ein gültiger unmapped Intake. Die CLI schreibt weder Register noch Meeting-Dateien.
+
+- [scripts/get-meeting.mjs](../../../scripts/get-meeting.mjs) - `scripts/get-meeting.mjs:64` (resolveRecordExportTarget), `scripts/get-meeting.mjs:113` (stageRecordExport), `scripts/get-meeting.mjs:134` (publishStagedRecordExport), `scripts/get-meeting.mjs:146` (exportMeetingRecord), `scripts/get-meeting.mjs:217` (main)
+- [scripts/_workspace-lease.mjs](../../../scripts/_workspace-lease.mjs) - `scripts/_workspace-lease.mjs:1` (canonical guard import in place)
+- [scripts/list-meetings.mjs](../../../scripts/list-meetings.mjs) - `scripts/list-meetings.mjs:1`
+- [scripts/list-channels.mjs](../../../scripts/list-channels.mjs) - `scripts/list-channels.mjs:1`
+- [scripts/probe-meeting-capabilities.mjs](../../../scripts/probe-meeting-capabilities.mjs) - `scripts/probe-meeting-capabilities.mjs:1`
+- [scripts/sync-meetings-to-memory.mjs](../../../scripts/sync-meetings-to-memory.mjs) - `scripts/sync-meetings-to-memory.mjs:69` (parseSyncArgs), `scripts/sync-meetings-to-memory.mjs:544` (runSync)
 
 ## Connected to
-[Client](client.md), [Meetings-Schema](meetings-schema.md), [Qualität](quality.md). Prozesse: [api-call](../processes/api-call.md).
+[Client](client.md), [Meetings-Schema](meetings-schema.md), [Record](record.md), [Writer](writer.md), [Sync](sync.md), [Qualität](quality.md). Prozesse: [api-call](../processes/api-call.md), [meeting-sync](../processes/meeting-sync.md).
 
 ## If you change this
-- **Hits:** CLI-Regressionen in `tests/`, README-Schnellstart, SKILL.md-Skriptverzeichnis, System-Map-Karten [CLI](cli.md) und [Qualität](quality.md).
-- **Does not hit:** Auth-Resolvierung solange nur Konsumiert; meetings.json-Schema.
+- **Hits:** CLI-Regressionen in `tests/`, README-Schnellstart, SKILL.md-Skriptverzeichnis, Karten [CLI](cli.md), [Record](record.md), [Qualität](quality.md).
+- **Does not hit:** Auth-Resolvierung solange nur konsumiert; Writer-interne Registerlogik.
 
 ## Surfaces
-CLI-Aufrufe aus Workspace-Root (oder mit `WORKSPACE_ROOT`); stdout ist maschinenlesbarer JSON-Envelope (markdown-Format: Plaintext-Dialog), stderr tragen Fehler. Der Fehlerpfad endet drain-safe via `process.exitCode`.
+CLI-Aufrufe aus dem Workspace-Root (oder mit `WORKSPACE_ROOT`); stdout ist maschinenlesbarer JSON-Envelope (markdown-Format: Plaintext-Dialog), stderr trägt Fehler. Datei-Export ausschließlich unter `<workspace>/data/*.meeting-export.json`. Fehlerpfade enden drain-safe via `process.exitCode`.
 
 ## See
-Skriptverzeichnis und Modi: [SKILL.md](../../../SKILL.md). [Änderungsrouting](../effects/CONTEXT.md).
+Skriptverzeichnis und Modi: [SKILL.md](../../../SKILL.md). [Record-Vertrag](../../../references/meeting-record-v1.md). [Änderungsrouting](../effects/CONTEXT.md).

@@ -12,3 +12,6 @@ secrets.json
 
 # Local meeting mirror (not part of the skill adapter)
 memory/
+
+# Local raw run evidence (never committed)
+runs/

@@ -5,8 +5,9 @@ description: Arbeite mit der Fireflies API für Meeting-Transkripte, Summaries, 
 
 # Fireflies API (SaaS-Adapter)
 
-> **Architektur-Rolle:** Technischer SaaS-Adapter für Fireflies.ai (GraphQL, Audio-Upload, Transkript-Abruf, Webhooks).  
-> **Workflow-Orchestrierung:** Die übergeordnete thematische Klassifikation, Evidenz-Ablage und Action-Item-Triage im Workspace wird durch **[`office-intelligence/meeting-desk`](../office-intelligence/skills/meeting-desk/SKILL.md)** gesteuert.
+> **Architektur-Rolle:** Technischer SaaS-Adapter für Fireflies.ai (GraphQL, Audio-Upload, Transkript-Abruf, Webhooks). Der Adapter transformiert API-Payloads in `meeting-record/1` und schreibt **keine** Meeting-Dateien und **kein** `meetings.json`.
+>
+> **Workflow-Orchestrierung und kanonischer Writer:** Die übergeordnete thematische Klassifikation, Evidenz-Ablage, Action-Item-Triage und alle Ingest-Dateimutationen liegen bei **[`office-intelligence/meeting-desk`](../office-intelligence/skills/meeting-desk/SKILL.md)**. Der Sync delegiert jeden Record an `ingest_meeting.py` dieses Skills.
 
 Nutze diesen Skill für direkte Fireflies-API-Operationen. Bevor du konkrete API-Operationen planst oder implementierst, hole dir den aktuellen Stand aus der offiziellen Doku.
 
@@ -34,6 +35,38 @@ Bereits lokal kuratiert:
 - Summary-Format für transcript-only Fälle: `references/summary-format.md`
 
 Wenn du Fireflies noch nicht gut genug kennst oder wenn sich das Thema nach aktueller Doku anhört, lies zuerst `references/fireflies-docs.md` und ziehe dann die passende Originalseite nach. Jedes Mal, wenn du neue Fireflies-Doku liest, überführe die belastbaren Inhalte sofort in eine thematisch passende lokale Referenzdatei, damit künftige Arbeit zunehmend ohne Webzugriff auskommt.
+
+## Kanonischer Meeting-Writer (OI #35)
+
+Der Adapter ist **Transformator**, nicht Publisher:
+
+- Fireflies-API-Payloads werden offline in genau einen `meeting-record/1`-Record transformiert (`scripts/_meeting-record.mjs`).
+- `sync-meetings-to-memory.mjs` liest `meetings.json` nur lesend (für Modus, Alias-Identität, Account-Bindung und Fingerprint-Vergleich) und ruft für jeden Record den kanonischen Python-Writer auf.
+- Es gibt **keinen** Register-Upsert, keinen Markdown-Write, kein Verschieben, Löschen oder Aktualisieren von Meeting-Dateien im Adapter. `relocate-local-meeting.mjs` wurde entfernt; Umrouting ist ein Writer-/Operator-Vorgang.
+- Ein Fehler des Writers ist ein Fehler. Es gibt **keinen stillen Fallback** auf einen Legacy-Writer.
+
+Vertrauenswürdige Aufrufkonfiguration (niemals aus dem Record oder Provider-Payload):
+
+```bash
+node scripts/sync-meetings-to-memory.mjs \
+  --meeting-writer <skill-root>/skills/meeting-desk/scripts/ingest_meeting.py \
+  --python <python> \
+  --workspace-lock-root <skill-root>/skills/workspace-lock \
+  --lease-id <lease> \
+  [--conversation-id <id>] \
+  [--topic <slug>] [--project <slug>] [--event <slug>] \
+  [--dry-run]
+```
+
+Alternativ als Operator-Fallback: `MEETING_DESK_WRITER` und `MEETING_DESK_PYTHON`. Die Pfade werden nie aus API-Daten abgeleitet. Vor Listen-/Detail-Queries prüft der Adapter `ingest_meeting.py --capabilities --json` und verlangt `data.record_schema = meeting-record/1` sowie `data.writer_version = meeting-desk/1`.
+
+Kindprozessvertrag: stdin ist genau ein UTF-8-JSON-Record (`--record -`), ohne Shell. stdout trägt genau einen Sechs-Feld-Envelope (`action`, `success`, `state`, `message`, `data`, `error`). Exit 0 **und** valider Erfolgs-Envelope sind gemeinsam nötig; Exit 2 ist Rejection, Exit 3 `recovery_required`. Timeout, Signal, widersprüchlicher Exit/Envelope oder unerwartete Ausgabe bedeuten einen unbekannten Ausgang und verlangen Writer-Inspect statt blindem Retry. Batch-Läufe melden Erfolg und Fehler pro Meeting (`meetings`, `failures`, `state`); ein Teilfehler ist kein voller Sync-Erfolg.
+
+Routing: `--topic`/`--project`/`--event` sind vertrauenswürdige Operator-Optionen; alte Aliase `--project-slug`, `--topic-slug`, `--event-slug` werden akzeptiert. Ohne Routing ist der Lauf ein gültiger **unmapped Intake** und kein Fehler. Der Adapter klassifiziert nicht: `classification_hint` bleibt leer, `review.recommended` ist `true`. Katalogvalidierung, `unmapped`/`unrouted`-Ablage und Reviewpflicht entscheidet der Writer.
+
+Record-Grenzen: `source.system = fireflies`, `source.external_id` und `meeting_id` sind die rohe, **opake** Fireflies-ID: keine Slugifizierung, keine Dateinamen-Bereinigung, keine erzwungene Umschlüsselung. Leere IDs, Steuerzeichen, unpaare Surrogate und IDs über 512 Zeichen werden abgewiesen; Leerzeichen, `/` oder `\` in einer gültigen opaken ID bleiben erhalten. Der Writer darf IDs nie als Dateipfadbestandteile verwenden. `date` (Epoch-Millisekunden) wird zu einem echten UTC-Zeitpunkt; eine reine Datumsangabe bleibt `utc: null`, `estimated: true`. Fehlende Zeit wird niemals durch Importzeit oder eine erfundene Mittagszeit ersetzt. `duration_minutes` sind Provider-Minuten; numerische Strings werden nicht still umgewandelt, der rohe Providerwert inklusive Originaltyp bleibt inert in `source_metadata` (`provider_duration_raw`, `provider_duration_raw_type`, `provider_duration_status`). `transcript_md` und `transcript_raw_md` sind getrennt; Raw enthält die unveränderten Satztexte in Providerreihenfolge, nur strukturell mit LF verbunden. Provider-Metadaten liegen inert in `source_metadata`. Die Summary-Completeness-Zeile nennt nur tatsächlich vorhandene Artefakte.
+
+Details: [`references/meeting-record-v1.md`](references/meeting-record-v1.md).
 
 ## Arbeitsweise
 
@@ -102,32 +135,19 @@ Vorgehen:
 - benötigte Felder minimieren
 - Meeting-ID, Transcript-ID oder Filter sauber klären
 - Antwort auf nutzbares internes Format reduzieren
-- relevante, wiederverwendbare oder vollständig abgerufene Meeting-Daten in eine lokale Meeting-Struktur unter `memory/evidence/meetings/` (Säule 2, mit automatischem Fallback auf `memory/references/meetings/` in Altsystemen) überführen
+- für Persistenz entweder den Sync (Record an den kanonischen Writer) oder den expliziten Record-Export von `get-meeting.mjs` verwenden; der Adapter schreibt selbst keine Meeting-Ablage
 - rein flüchtige Ad-hoc-Checks nur dann persistieren, wenn der Nutzer das verlangt oder spätere Wiederverwendung absehbar ist
 
-#### Lokale Meeting-Ablage (Dual-Evidence-Standard)
+#### Record-Export und kanonischer Writer (Dual-Evidence-Standard)
 
-Wenn Meeting-Daten abgerufen werden, lege oder aktualisiere eine lokale Struktur unter `memory/evidence/meetings/` (mit Fallback auf `memory/references/meetings/`).
+Die lokale Meeting-Ablage unter `memory/evidence/meetings/` (Fallback `memory/references/meetings/`) gehört dem meeting-desk-Writer. Der Adapter liefert nur den Record.
 
-Für Struktur, `meetings.json`, Frontmatter und Markdown-Dateien immer `references/data-model.md` als maßgebliches Schema verwenden.
-
-Kurzregeln:
-- `memory/evidence/meetings/meetings.json` pflegen
-- im Top-Level zusätzlich `channel_strategy` mit dem knappen-Channel-Modell führen
-- einen Channel-Filter beim Sync nur als Laufzeitparameter verwenden, nicht als persistierten Meeting-Fakt
-- in `channel_mappings` pro Channel mindestens `routing_mode` mitführen
-- Fireflies-Channels nicht als fachliche Endstruktur behandeln
-- der Sync dient für Intake, Spiegelung, Review-Vormerkung und Update-Erkennung, nicht für die endgültige Projekt-/Topic-Klassifikation
-- pro Meeting zusätzlich `classification_status`, `classification_confidence`, `classification_notes`, `classification_basis`, `review_recommended`, `review_reason` und `classifier_mode` pflegen
-- `project_slug` und `topic_slug` im Sync zunächst leer lassen, wenn die fachliche Klassifikation erst nachgelagert im Chat erfolgen soll
-- `resolved_by`, `resolved_at`, `llm_review_status` und `llm_review_summary` optional für den späteren Review-Nachgang pflegen
-- für Update-Erkennung `server_fingerprint`, `server_change_status`, `server_changed_since_last_sync`, `first_synced_at` und `last_synced_at` mitführen
-- Meeting-Ordner unter dem ersten Channel anlegen, sonst sinnvoller Fallback
-- Summary als eigene Markdown-Datei anlegen
-- Volltranskript bei vollständigem Abruf als zweite Markdown-Datei anlegen
-- stabile slug-basierte Dateinamen verwenden
-- `project_slug` und `topic_slug` mit den Katalog-Skills `project-catalog-entry` und `topic-catalog-entry` kompatibel halten
-- **Verschiebung & Pfadkonsistenz**: Die physischen Meeting-Dateien (Zusammenfassung/Volltranskript) können nachträglich in spezifischere Zielordner (wie Projekt-, Topic- oder Eventstrukturen unter `memory/evidence/`) verschoben werden. In diesem Fall **müssen** die entsprechenden Pfade (`summary_path` und `transcript_path`) in `meetings.json` angepasst werden, damit die JSON die kanonische Quelle für alle lokalen Meetings bleibt.
+- **stdout** von `get-meeting.mjs` bleibt ein flüchtiger JSON-/Markdown-Export.
+- **Dateiausgabe** ist ausschließlich ein gültiger `meeting-record/1`-Record mit Endung `.meeting-export.json` unter `<workspace>/data/`. Dafür sind ein expliziter Trusted Lease (`--lease-id`) und ein expliziter Lock-Root (`--workspace-lock-root`) nötig. Der Export importiert den Shared Guard `workspace_lock_guard.py` **in place** (`require_workspace_lock(..., allow_legacy=False)`) und prüft Lease + Pfad vor Credentials/API, erneut vor dem Staging und unmittelbar vor der create-only-Publikation. Freigabe/Ersatz der Lease nach Fetch oder Staging hinterlässt weder Export noch Temp-Datei; eine Race zwischen letzter Prüfung und atomarem Create bleibt im kooperativen Lockmodell möglich. Die deklarierte Lease-ID ist eine kooperative Zusicherung, keine kryptografische Aufruferidentität. Ein `--output` außerhalb dieser Zone, mit anderer Endung oder als Markdown wird **vor** jedem API-Aufruf abgewiesen.
+- **Sync** delegiert jeden Record an den Writer. Nur der Writer pflegt `meetings.json`, Frontmatter, Summary-/Transcript-Dateien, Pfade, Review- und Content-Status.
+- Der Writer erhält `--topic`/`--project`/`--event` nur aus vertrauenswürdiger Operator-Konfiguration. Ohne Routing entsteht ein gültiger unmapped Intake; der Adapter erfindet keine Klassifikation und keine Freigabe.
+- Für Update-Erkennung bleibt `server_fingerprint` eine reine Adapter-/Lesezustands-Fähigkeit: der Vergleich liest den vorhandenen Registereintrag, das Ergebnis liegt inert in `source_metadata`; geschrieben wird es nur vom Writer.
+- `project_slug`, `topic_slug`, `event_slug`, `classification_status` und `content_status` sind Writer-/Registerfelder, keine Adapter-Rootfelder.
 
 ### 2) Audio hochladen
 
@@ -147,13 +167,12 @@ Zulässige Quellen:
 - andere lokal verfügbare Textdateien mit Transcript-Inhalt
 
 Regeln:
-- externe oder manuell gelieferte Transkripte inhaltlich auswerten und analog zu Fireflies-Meetings unter `memory/evidence/meetings/` (bzw. `memory/references/meetings/`) speichern
-- dafür dieselbe Ordnerstruktur, `meetings.json`, Summary-Datei und optional Volltranskript-Datei verwenden
-- im Datenmodell die Quelle sauber markieren, zum Beispiel über `source.system`, `source.import_mode` und `source.origin_path`
-- wenn Channel-Zuordnung fehlt, sinnvollen Fallback-Ordner verwenden und Mapping offenlassen statt etwas zu erfinden
-- bei manuellen Imports aus dem Inhalt nach Möglichkeit dieselben Klassifikations- und Routingregeln anwenden wie bei Fireflies-Meetings
-- falls Rohformat oder Qualität schlecht sind, das im Meeting-Eintrag und in der Summary kenntlich machen
-- wenn nur ein Transcript vorliegt, keine vorhandene Summary verfügbar ist oder die gelieferte Summary unzureichende Inhalte (z. B. leere Abschnitte) aufweist, nach `references/summary-format.md` eine eigene Meeting-Summary anhand des Transkripts erzeugen
+- externe oder manuell gelieferte Transkripte inhaltlich auswerten, aber **nicht selbst** unter `memory/evidence/meetings/` ablegen; die Ablage ist Aufgabe des kanonischen Writers
+- die Quelle im Record sauber markieren (`source.system`, `external_id`); provider-spezifische Herkunft gehört inert nach `source_metadata`
+- wenn eine Channel-/Projektzuordnung fehlt, nichts erfinden: ohne vertrauenswürdige Operator-Auswahl bleibt der Intake unmapped und reviewpflichtig
+- bei manuellen Imports aus dem Inhalt dieselben Writer-/Routingregeln verwenden wie bei Fireflies-Meetings; der Adapter klassifiziert nicht
+- falls Rohformat oder Qualität schlecht sind, das im Record (z. B. `review.reason` oder `source_metadata`) kenntlich machen
+- wenn nur ein Transcript vorliegt, keine vorhandene Summary verfügbar ist oder die gelieferte Summary unzureichende Inhalte (z. B. leere Abschnitte) aufweist, nach `references/summary-format.md` eine eigene Meeting-Summary anhand des Transkripts erzeugen und als `summary_md` in den Record geben
 
 ### 4) Webhook-Integration
 
@@ -176,32 +195,34 @@ Grundsatz für die aktuelle Free-Nutzung:
 - die lokale Meeting-Klassifikation nach dem Sync ist Source of Truth, nicht der Channel selbst
 
 Regeln:
-- der Sync soll keine endgültige Projekt- oder Topic-Zuordnung erzwingen
-- im Sync lieber ungemappt speichern als voreilig falsch zuzuordnen
+- der Sync erzwingt keine endgültige Projekt- oder Topic-Zuordnung
+- im Sync lieber ungemappt an den Writer geben als voreilig falsch zuzuordnen
 - Inhalt schlägt Channel, Katalog schlägt bloße Namensähnlichkeit
+- Channel-Evidenz ist Provider-Metadatum (`source_metadata.channel_*`), keine Klassifikation
 
 Empfohlene Reihenfolge im Sync:
-1. Prüfen, ob in `meetings.json.channel_strategy` das knappe-Channel-Modell aktiv ist.
-2. Optionalen Channel-Filter nur für den Lauf übernehmen.
-3. Meetings holen und lokal spiegeln.
-4. `classification_status` zunächst auf unaufgelöst lassen, wenn noch keine fachliche Entscheidung getroffen wurde.
-5. `review_recommended: true` setzen, wenn die eigentliche Fachklassifikation nachgelagert erfolgen soll.
-6. Ein kompaktes `review_input` für den aufrufenden Agenten schreiben.
+1. Optionalen Channel-Filter nur für den Lauf übernehmen.
+2. Capabilities des kanonischen Writers prüfen.
+3. Meetings holen und je Meeting einen Record bauen.
+4. Ohne vertrauenswürdige `--project`/`--topic`/`--event`-Auswahl bleibt `classification_hint` leer.
+5. `review.recommended: true` bleibt gesetzt; der Writer entscheidet über `unmapped`/Reviewpflicht.
+6. Der Writer schreibt Register und Review-Zustand; der Adapter liest nur.
 
 ### 6) Nachgelagerte Klassifikation durch den aufrufenden Agenten
 
 Die eigentliche Projekt- und Topic-Zuordnung soll nicht im Sync-Skript selbst laufen, sondern im aufrufenden Agenten nachgelagert erfolgen.
 
 Regelmodell:
-- Das Sync-Skript ist zuständig für Intake, Spiegelung, Änderungs-Erkennung und Review-Vorbereitung.
-- Der aufrufende Agent ist zuständig für die fachliche Auflösung zu Projekten und Topics.
+- Der Adapter ist zuständig für API-Intake, Record-Transformation, Änderungs-Erkennung und das Melden von Provider-Evidenz.
+- Der kanonische Writer ist zuständig für Register, Review-Zustand, Pfade und Publikation.
+- Der aufrufende Agent ist zuständig für die fachliche Auflösung zu Projekten und Topics über den vertrauenswürdigen Writer-/Operator-Kanal.
 - Ein LLM oder Mensch ist zuständig für schwierige Fälle mit Mehrfachkontext, konkurrierenden Kandidaten oder unklarer Primärzuordnung.
 
 Praktische Umsetzung:
-- Das Sync-Skript schreibt `review_input` sowie `llm_review_status`.
+- Der Writer schreibt `review_input`, `classification_status` und `llm_review_status`; der Adapter liest sie nur.
 - Der Agent liest diese Daten nach dem Sync und entscheidet, ob direkte Zuordnung, LLM-Review oder Rückfrage nötig ist.
 - Wenn mehrere Projekte und/oder Topics plausibel sind, nicht künstlich im Sync auf genau eines reduzieren.
-- Der eigentliche LLM-Schritt soll nicht im Sync-Skript selbst laufen, sondern im aufrufenden Agenten nachgelagert erfolgen.
+- Der eigentliche LLM-Schritt läuft nicht im Sync-Skript, sondern im aufrufenden Agenten nachgelagert.
 
 ### 7) Lokaler Sync und Update-Erkennung
 
@@ -214,26 +235,25 @@ Aktuelle Skripte:
   - listet Meetings mit Filtern und Pagination
 - `get-meeting.mjs`
   - lädt ein einzelnes Meeting, `--mode minimal|full|sentences-only`
-  - `--format markdown` rendert den Speaker-Dialog als Markdown (`[mm:ss] Speaker`), `--output <file>` schreibt das Ergebnis in eine Datei (stdout bleibt kurzer Bestätigungs-Envelope)
+  - `--format markdown` rendert den Speaker-Dialog als Markdown (`[mm:ss] Speaker`) auf stdout
   - `--format markdown` wählt ohne explizites `--mode` automatisch den sentences-only-Modus; ein explizites `--mode` gewinnt
   - `--sentences-only` fragt nur die Sentence-Felder ab (kein summary/minimal-Ballast)
-  - `--with-frontmatter` prepended einen schlanken YAML-Frontmatter-Block (id, title, date, duration_minutes, participants, source, type) — nur mit `--format markdown`; der effektive sentences-only-Modus wird dafür automatisch auf `full` angehoben (explizites `--mode` gewinnt)
+  - `--with-frontmatter` prepended einen schlanken YAML-Frontmatter-Block (id, title, date, duration_minutes, participants, source, type) — nur mit `--format markdown` und nur auf stdout; der effektive sentences-only-Modus wird dafür automatisch auf `full` angehoben
   - `--speaker-map "0=Dr. X,1=Martin"` (oder JSON) mapped Speaker-IDs/Namen im Markdown-Export; unbekannte Speaker behalten ihr Original-Label
+  - `--output <datei>.meeting-export.json` schreibt ausschließlich einen validen `meeting-record/1`-Record unter `<workspace>/data/`; verlangt `--lease-id` und `--workspace-lock-root`, prüft den kanonischen Guard (in place, `allow_legacy=False`) und den Pfad **vor** Credentials/API, vor dem Staging und unmittelbar vor der Publikation und schreibt no-clobber. Freigabe/Ersatz der Lease nach Fetch oder Staging hinterlässt keine Datei. Der Export nutzt immer den vollen Feldkatalog. Markdown-Dateien, andere Endungen und Pfade außerhalb von `data/` werden abgewiesen.
 - `sync-meetings-to-memory.mjs`
-  - synchronisiert Meetings in `memory/evidence/meetings/` (mit Fallback auf `memory/references/meetings/`)
-  - `--project-slug <slug>` sammelt meeting-Dateien direkt unter `memory/evidence/projects/<slug>/meetings/<channel>/` ab; `meetings.json` bleibt am Meetings-Root und vermerkt `project_slug`/`project_scoped` (Nutzer-Vormerkung, keine Klassifikation — `review_recommended` bleibt `true`)
-  - Der Projektbaum bleibt Dual-Evidence-fest an `workspaceRoot/memory/evidence/projects/` verdrahtet und folgt keinem Custom-`meetingsRoot` (nur der Pool folgt dem Custom-Root); leer-normalisierende Projekt-Slugs (z. B. `---`) werden fail-loud als `empty_project_slug` abgewiesen, statt den `ohne-channel`-Fallback zu erben
+  - liest `meetings.json` nur lesend und delegiert jeden Meeting-Record an den kanonischen Writer
+  - schreibt selbst keine Meeting-Dateien, kein Register, keine Frontmatter und keine Pfade
+  - `--project`/`--topic`/`--event` (Aliase `--project-slug`/`--topic-slug`/`--event-slug`) sind vertrauenswürdige Routing-Optionen für den Writer; ohne Routing ist der Lauf ein gültiger unmapped Intake
+  - explizit leere oder zu `ohne-channel` normalisierende Routingwerte werden fail-loud als `empty_project_slug` o. Ä. abgewiesen; ein **fehlendes** `--project-slug` ist kein Fehler
+  - Writer-Konfiguration: `--meeting-writer`, `--python`, `--workspace-lock-root`, `--lease-id`, optional `--conversation-id`; Env-Fallback nur `MEETING_DESK_WRITER`/`MEETING_DESK_PYTHON`
 - `probe-meeting-capabilities.mjs`
   - prüft für ein konkretes Meeting read-only, welche Felder/Artefakte im aktuellen Account/Plan tatsächlich befüllt oder gesperrt sind
   - Standard-Query fordert planabhängige Paid-Felder (`audio_url`, `video_url`, `analytics`) bewusst nicht an; `--include-paid-fields` fordert sie gezielt nach (auf einem Free-Plan bricht Fireflies die gesamte Query mit `paid_required` ab)
   - nicht abgefragte Capabilities werden als `null` ("nicht abgefragt") ausgewiesen, statt `false` zu behaupten
   - `--include-summary` fordert zusätzlich den Summary-Block an
   - Einsatz: kurze Capability-Checks, bevor neue Metadaten dauerhaft in den Sync übernommen werden
-- `relocate-local-meeting.mjs`
-  - hängt ein bereits lokal gespiegeltes Meeting nur in `memory/evidence/meetings/` (oder `memory/references/meetings/`) um und zieht Frontmatter + `meetings.json` lokal nach
-  - `--to-project <slug>` verschiebt ein Meeting aus dem generellen Pool in den Projekt-Baum (`memory/evidence/projects/<slug>/meetings/<channel>/`); fail-loud bei Ziel-Kollision, ohne Klassifikationsänderung
-  - keine Fireflies-API-Aktion; gedacht für lokale Nachpflege wie `ohne-channel` → `channel-slug`
-  - **Recovery bei Teilverschiebung**: Der Executor prüft zuerst beide Zielpfade, verschiebt dann beide Dateien und schreibt die Frontmatter-Updates erst danach an die Zielpfade. Scheitert der zweite Move (z. B. fehlende Quelle oder FS-Fehler), bleibt `meetings.json` unverändert und zeigt weiterhin die Quellpfade — die bereits verschobene Datei liegt dann am Ziel (mit unverändertem Original-Frontmatter), die dort verlinkte Quelle existiert nicht mehr (dangling Registry-Zeiger bis zum Abschluss). Re-Runs konvergieren NICHT (`target_file_exists` am Pre-Check). Recovery: entweder die verschobene Datei manuell zurück an die Quelle legen, die Kollision beseitigen und `--to-project` erneut ausführen — oder manuell abschließen: Restdatei in den Zielordner verschieben, Frontmatter beider Zieldateien (`summary_path`, `transcript_path`, `project_slug`) nachziehen und die `meetings.json`-Pfade anpassen.
+- `relocate-local-meeting.mjs` existiert nicht mehr. Umrouting/Verschieben ist Aufgabe des kanonischen Writers, nicht des Fireflies-Adapters.
 
 Empfohlene Sync-Modi:
 - Standardlauf ohne Zusatzoptionen
@@ -245,34 +265,28 @@ Empfohlene Sync-Modi:
 
 Regeln für Update-Erkennung:
 - Nicht auf ein erfundenes `updated_at` vertrauen, wenn die Doku kein belastbares Feld dafür zeigt.
-- Stattdessen relevante Serverfelder lokal hashen und als `server_fingerprint` speichern.
+- Stattdessen relevante Serverfelder lokal hashen und als `server_fingerprint` **lesen**; das Ergebnis gehört inert in `source_metadata` und wird nur vom Writer in den Registereintrag übernommen.
 - Aus altem und neuem Fingerprint `server_change_status` ableiten: `new`, `unknown`, `changed`, `unchanged`.
 - `server_changed_since_last_sync` nur als Kurzsignal für den letzten Vergleich verwenden.
 - Webhooks sind nützlich für Ereignisse wie `meeting.transcribed` und `meeting.summarized`, ersetzen aber den Inhaltsvergleich nicht vollständig.
-- Lokal gespeicherte Meetings/Dateien nicht automatisch löschen, auch wenn ein Meeting serverseitig nicht mehr verfügbar ist (Free-Plan-Limit mit ca. 800 Minuten; lokale Referenzen dienen als Langzeitarchiv).
+- Lokal gespeicherte Meetings/Dateien nicht automatisch löschen, auch wenn ein Meeting serverseitig nicht mehr verfügbar ist (Free-Plan-Limit mit ca. 800 Minuten; lokale Referenzen dienen als Langzeitarchiv). Lösch-/Aufräumpfade liegen nicht im Adapter.
 
 ### 8) Nachgelagerte LLM-Klassifikation durch den aufrufenden Agenten
 
-Wenn `review_recommended: true` gesetzt ist, soll der aufrufende Agent den Review-Fall nach dem Sync aktiv weiterbearbeiten.
+Wenn der vom Writer geführte Registereintrag Review verlangt (`review_recommended: true`), soll der aufrufende Agent den Review-Fall nach dem Sync aktiv weiterbearbeiten.
 
 Empfohlenes Vorgehen:
-1. `review_input` aus `meetings.json` lesen.
+1. Den Writer-/Registerzustand (z. B. `review_input`, `classification_status`) lesen.
 2. Prüfen, ob der Fall klar genug für eine direkte Agentenentscheidung ist.
 3. Wenn nötig, zusätzliche Meeting-Ausschnitte, Summary oder Match-Listen heranziehen.
 4. Wenn weiterhin Mehrdeutigkeit besteht oder der Nutzerkontext entscheidend ist, kurze Rückfrage im Chat stellen.
-5. Danach finale Entscheidung in die kanonischen Felder schreiben:
-   - `project_slug`
-   - `topic_slug`
-   - `llm_review_summary`
-   - `resolved_by`
-   - `resolved_at`
-   - `llm_review_status`
+5. Danach die Entscheidung über den vertrauenswürdigen Writer-/Operator-Kanal anwenden (`--topic`, `--project`, `--event` oder den dafür vorgesehenen Writer-Vorgang), nicht durch direktes Schreiben des Adapters in `meetings.json`.
 
 Regeln:
-- Der Agent schreibt die finale Entscheidung direkt in `project_slug` und `topic_slug`.
-- `llm_review_status` auf `resolved` setzen, wenn der Agent eine tragfähige Entscheidung getroffen hat.
-- `llm_review_status` auf `user-query` setzen, wenn noch eine Nutzerentscheidung oder Rückfrage offen ist.
-- Wenn neue Serveränderungen erkannt werden, darf ein zuvor gelöster Fall wieder auf `pending` zurückfallen.
+- Der Adapter schreibt **keine** finale Klassifikation, keinen Review-Status und keine Content-Freigabe.
+- Eine Adapter-`review.recommended: true` darf Review nur zusätzlich anfordern, nie herabsetzen.
+- `accepted` ist kein Adapter-Ergebnis; ein Import ist kein Content-Approval.
+- Wenn neue Serveränderungen erkannt werden, entscheidet der Writer über die Reviewpflicht des geänderten Inhalts.
 
 ### 9) Summary-Audit-Standard für High-Stakes-Meetings
 
@@ -291,7 +305,7 @@ Ein Transkript-Audit muss geprüft werden bei:
 - [ ] Action Item Attribution: Ist jede Aufgabe dem tatsächlichen Sprecher bzw. Verantwortlichen zugeordnet?
 
 Dual-Evidence-Ablage:
-- Summary und Volltranskript bleiben als Paar erhalten (`<slug>.summary.md` und `<slug>.transcript.md`) unter `memory/evidence/meetings/` (Fallback `memory/references/meetings/`).
+- Summary und Volltranskript werden ausschließlich vom kanonischen Writer als Paar unter `memory/evidence/meetings/` (Fallback `memory/references/meetings/`) publiziert; der Adapter liefert `summary_md`, `transcript_md` und `transcript_raw_md` getrennt im Record.
 - Erkennt der Audit Diskrepanzen oder Omissionen, wird der Summary-Datei der optionale Abschnitt `## Transkript-Audit & Ergänzungen` angehängt; Format, Auslöser und Beispielzeilen stehen in [`references/summary-format.md`](references/summary-format.md).
 
 ## Ausgabeprinzipien
@@ -311,5 +325,6 @@ Dual-Evidence-Ablage:
 - Capability Matrix: `references/capability-matrix.md`
 - Channels und Meeting-Zuordnung: `references/channels.md`
 - Summary-Format für transcript-only Fälle: `references/summary-format.md`
-- Transcript-Datenmodell: `references/data-model.md`
+- Transcript-Datenmodell und kanonisches Register: `references/data-model.md`
+- Record-Vertrag und Writer-Seam: `references/meeting-record-v1.md`
 - Weitere Themen-Dateien bei Bedarf, zum Beispiel `graphql-basics.md`, `limits-and-gotchas.md`, `realtime-api.md`

@@ -69,7 +69,7 @@ Optional weiter relevant:
 
 - Diese Felder eher im Frontmatter oder im Markdown-Body der Meeting-Datei sichtbar machen.
 - `meetings.json` eher kompakt halten.
-- Für bestehende Sync-Skripte genügt meist eine Erweiterung der Summary-Feldauswahl und eine kontrollierte Ausgabe in die Markdown-Dateien.
+- Der Adapter liefert die Summary als `summary_md` im Record; die kontrollierte Ausgabe in die Markdown-Dateien und das Register übernimmt der kanonische Writer.
 
 ## Quellen
 

@@ -1,16 +1,23 @@
 # fireflies-api skill
 
 Kompakter Skill für Fireflies GraphQL-Workflows (Meetings, Channels, Transcript-Intake).
+Der Skill ist ein **Record-Adapter**: er transformiert Fireflies-Payloads in
+`meeting-record/1` und delegiert jede Meeting-Ablage an den kanonischen
+`meeting-desk`-Writer. Er schreibt selbst weder Meeting-Dateien noch
+`meetings.json`.
 
 ## Inhalt
 
 - [SKILL.md](SKILL.md): Arbeitsregeln und Einsatzbereich des Skills
-- [scripts/](scripts/): wiederverwendbare Node-Skripte für Fireflies API und lokalen Sync
-- [references/](references/): kuratierte Fachreferenzen zur Fireflies-Doku
+- [scripts/](scripts/): Node-Skripte für Fireflies API, Record-Transformation und Writer-Transport
+- [references/](references/): kuratierte Fachreferenzen inklusive Record-Vertrag
 
 ## Voraussetzungen
 
 - Node.js (empfohlen: aktuelles LTS oder neuer)
+- Python 3 und der kanonische Writer `meeting-desk/scripts/ingest_meeting.py` für Sync-Läufe
+- Ein Trusted Workspace-Lock-Root (`workspace-lock`) und eine aktive, eigene Lease für Schreibvorgänge; der Export importiert den Shared Guard `workspace_lock_guard.py` in place (`allow_legacy=False`). Die Lease-ID ist eine kooperative Zusicherung, keine kryptografische Aufruferidentität.
+- Python 3 und ein erreichbarer OI-`verify_meeting_fixtures.py` für die erforderliche Cross-Repo-Konformitätsprüfung
 - Der Skill soll in Agent-Workspaces lokal unter `.agents/skills/fireflies-api` verlinkt sein, damit Workspace-Kontext und lokale Secrets konsistent aufgeloest werden.
 - Secrets in einer der folgenden Dateien:
   - `.agents/secrets.json` im Workspace-Root (bevorzugt)
@@ -42,6 +49,27 @@ Vom Repo-Root (Verzeichnis dieses README):
 ```bash
 node scripts/list-channels.mjs
 node scripts/list-meetings.mjs --limit 5
+node scripts/get-meeting.mjs <transcriptId> --format markdown
+```
+
+Record-Export (nur unter `<workspace>/data/`, no-clobber):
+
+```bash
+node scripts/get-meeting.mjs <transcriptId> \
+  --output data/meeting.meeting-export.json \
+  --lease-id <lease> \
+  --workspace-lock-root <skill-root>/workspace-lock
+```
+
+Kanonischer Sync (keine eigenen Meeting-Writes):
+
+```bash
+node scripts/sync-meetings-to-memory.mjs \
+  --meeting-writer <skill-root>/meeting-desk/scripts/ingest_meeting.py \
+  --python <python> \
+  --workspace-lock-root <skill-root>/workspace-lock \
+  --lease-id <lease> \
+  [--project <slug>] [--topic <slug>] [--event <slug>] [--dry-run]
 ```
 
 ## Lizenz

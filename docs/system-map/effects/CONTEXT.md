@@ -7,7 +7,10 @@ Inputs: Änderungsauftrag. Nicht den gesamten Baum laden; die Karten tragen die 
 | Secrets-Resolvierung, Account-Auswahl | [Client](../objects/client.md), [Qualität](../objects/quality.md) |
 | GraphQL-Felder, Query-Aufbau | [Meetings-Schema](../objects/meetings-schema.md) |
 | CLI-Skript hinzufügen, Argumente, Ausgabeformat | [CLI](../objects/cli.md), [Qualität](../objects/quality.md) |
-| Sync-Verhalten, meetings.json, Ordnerlogik | [Sync](../objects/sync.md), [Skill-Verhalten](../objects/skill-behavior.md) |
+| Record-Felder, Zeit-/Dauer-/Raw-Mapping | [Record](../objects/record.md), [Qualität](../objects/quality.md) |
+| Writer-Aufruf, Envelope/Exit/Timeout, Capabilities | [Writer](../objects/writer.md), [Sync](../objects/sync.md), [Qualität](../objects/quality.md) |
+| Sync-Verhalten, read-only meetings.json, Routing | [Sync](../objects/sync.md), [Skill-Verhalten](../objects/skill-behavior.md) |
+| Ad-hoc-Dateiexport, Lease-/Zonen-Gate | [CLI](../objects/cli.md), [Qualität](../objects/quality.md) |
 | Arbeitsregeln, Referenz-Kurating | [Skill-Verhalten](../objects/skill-behavior.md) |
 | tests/ erweitern | [Qualität](../objects/quality.md) |
 

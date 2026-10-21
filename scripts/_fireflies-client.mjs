@@ -222,6 +222,10 @@ export function printError(error) {
   const payload = {
     ok: false,
     error: error?.message ?? 'unknown_error',
+    kind: error?.kind ?? null,
+    exit_code: error?.exitCode ?? null,
+    recovery_required: error?.recoveryRequired === true,
+    outcome_unknown: error?.outcomeUnknown === true,
     status: error?.status ?? null,
     body: error?.body ?? null
   };
