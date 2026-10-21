@@ -57,9 +57,10 @@ Beispiel-Variablen:
 - Vor API-Write immer Channel-ID über `list-channels.mjs` verifizieren
 - Bei lokaler Nachpflege klar zwischen
   - echter Fireflies-API-Änderung und
-  - rein lokaler Meeting-Umsortierung in `memory/references/meetings/`
+  - lokalem Writer-/Register-Vorgang
   unterscheiden
-- Wenn der User explizit **keine API-Aktion** will, nur lokale Dateien und `meetings.json` anfassen
+- Der Fireflies-Adapter führt **keine** lokale Meeting-Umsortierung, keine Registeränderung und kein Löschen mehr aus; `relocate-local-meeting.mjs` wurde entfernt. Lokale Pflege läuft ausschließlich über den kanonischen Writer (z. B. erneuter Ingest mit vertrauenswürdiger Route).
+- Wenn der User explizit **keine API-Aktion** will, keine Fireflies-Mutation ausführen und den Writer-/Operator-Kanal für die lokale Ablage nutzen; niemals `meetings.json` direkt vom Adapter anfassen.
 
 ## Quellen
 

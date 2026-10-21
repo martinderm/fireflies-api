@@ -3,8 +3,8 @@ type: process
 universe: live
 status: verified
 entity: scripts/_fireflies-client.mjs
-verified_at: 2026-10-03
-revision: 3b90b8f8ae06a0e6d99ea69d68fc4982db4edf31
+verified_at: 2026-10-21
+revision: c8c22cc+oi35-working-tree
 consumes: [../objects/client.md]
 produces: [../objects/cli.md, ../objects/sync.md]
 ---
@@ -20,8 +20,8 @@ Auth und Fehlersemantik an einem Ort; Skripte entscheiden nur über Feldauswahl 
 ## Steps
 1. Resolviert Workspace-Root aus `WORKSPACE_ROOT`, logischem PWD, CWD-Ancestors und Skriptherkunft. Quelle: [scripts/_fireflies-client.mjs](../../../scripts/_fireflies-client.mjs) — `scripts/_fireflies-client.mjs:73`.
 2. Liest den ersten existierenden Secrets-Kandidaten (`.agents/secrets.json`, `secrets.json` pro Root, dann `~/.openclaw/secrets.json`) und resolviert den API-Key über Settings oder Accounts-Map. Quelle: [scripts/_fireflies-client.mjs](../../../scripts/_fireflies-client.mjs) — `scripts/_fireflies-client.mjs:92`, `scripts/_fireflies-client.mjs:143`.
-3. Sendet die Query als Bearer-POST und wirft `http_<status>` bzw. `graphql_error` mit angehängtem Body. Quelle: [scripts/_fireflies-client.mjs](../../../scripts/_fireflies-client.mjs) — `scripts/_fireflies-client.mjs:159`.
-4. CLI-Adapter drucken den Erfolgs-Envelope auf stdout oder den Fehler-Envelope auf stderr und setzen Exit-Codes (2 = Nutzung, 1 = API). Quelle: [scripts/get-meeting.mjs](../../../scripts/get-meeting.mjs) — `scripts/get-meeting.mjs:26`.
+3. Sendet die Query als Bearer-POST und wirft `http_<status>` bzw. `graphql_error` mit angehängtem Body. Quelle: [scripts/_fireflies-client.mjs](../../../scripts/_fireflies-client.mjs) — `scripts/_fireflies-client.mjs:179`.
+4. CLI-Adapter drucken den Erfolgs-Envelope auf stdout oder den Fehler-Envelope auf stderr und setzen Exit-Codes (2 = Nutzung, 1 = API). Quelle: [scripts/get-meeting.mjs](../../../scripts/get-meeting.mjs) — `scripts/get-meeting.mjs:246`.
 
 ## If you change this
 - **Hits:** Alle Skripte, Secrets-Regressionen, Ausgabe-Envelopes.

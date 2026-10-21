@@ -1,5 +1,3 @@
-import path from 'node:path';
-import { relativeWorkspacePath } from './_path-helpers.mjs';
 import { yamlString, yamlDurationMinutes } from './_yaml-helpers.mjs';
 
 function normalizeText(value) {
@@ -381,7 +379,14 @@ export function parseGetMeetingArgs(argv) {
         throw new Error(`unexpected_positional_argument:${arg}`);
       }
       args.transcriptId = arg;
-    } else if (arg === '--mode' || arg === '--format' || arg === '--output' || arg === '--speaker-map') {
+    } else if (arg === '--mode'
+      || arg === '--format'
+      || arg === '--output'
+      || arg === '--speaker-map'
+      || arg === '--lease-id'
+      || arg === '--workspace-lock-root'
+      || arg === '--workspace'
+      || arg === '--python') {
       rejectFlagValue(arg, next);
       if (arg === '--mode') {
         args.mode = next;
@@ -390,8 +395,16 @@ export function parseGetMeetingArgs(argv) {
         args.format = next;
       } else if (arg === '--output') {
         args.output = next;
-      } else {
+      } else if (arg === '--speaker-map') {
         args.speakerMap = next;
+      } else if (arg === '--lease-id') {
+        args.leaseId = next;
+      } else if (arg === '--workspace-lock-root') {
+        args.workspaceLockRoot = next;
+      } else if (arg === '--workspace') {
+        args.workspace = next;
+      } else {
+        args.python = next;
       }
       i += 1;
     } else if (arg === '--sentences-only') {
@@ -431,6 +444,21 @@ export function validateGetMeetingArgs(args) {
 
   if (args.withFrontmatter && args.format !== 'markdown') {
     throw new Error('frontmatter_requires_markdown_format');
+  }
+
+  if (args.output) {
+    if (!String(args.output).endsWith('.meeting-export.json')) {
+      throw new Error('output_must_end_with_meeting_export_json: use data/<name>.meeting-export.json');
+    }
+    if (args.format !== 'json') {
+      throw new Error('output_requires_json_record_export: use --format json for a record export');
+    }
+    if (!args.leaseId) {
+      throw new Error('output_requires_lease_id: pass the active workspace lease id');
+    }
+    if (!args.workspaceLockRoot) {
+      throw new Error('output_requires_workspace_lock_root: pass the trusted workspace-lock skill root');
+    }
   }
 
   return args;
@@ -510,88 +538,4 @@ export function buildListMeetingsRequest(options = {}, fields = LIST_MEETINGS_FI
 }`;
 
   return { query, variables };
-}
-
-function resolveProjectRoot(workspaceRoot, projectSlug) {
-  return path.join(workspaceRoot, 'memory', 'evidence', 'projects', projectSlug);
-}
-
-export function buildMeetingDestinationPaths(options = {}) {
-  const {
-    meetingsRoot,
-    projectSlug = null,
-    channelSlug = null,
-    datePrefix = 'undated',
-    meetingSlug = '',
-    workspaceRoot = null
-  } = options;
-  const channelFolder = channelSlug || 'ohne-channel';
-  const root = workspaceRoot ?? path.resolve(meetingsRoot, '..', '..', '..');
-  const folderPath = projectSlug
-    ? path.join(resolveProjectRoot(root, projectSlug), 'meetings', channelFolder)
-    : path.join(meetingsRoot, channelFolder);
-
-  return {
-    folderPath,
-    summaryFileName: `${datePrefix}-${meetingSlug}.summary.md`,
-    transcriptFileName: `${datePrefix}-${meetingSlug}.transcript.md`
-  };
-}
-
-export function buildProjectRelocatePlan(meeting, options = {}) {
-  const { projectSlug: rawProjectSlug, workspaceRoot } = options;
-  const projectSlug = slugify(rawProjectSlug);
-  if (!projectSlug || projectSlug === 'ohne-channel') {
-    throw new Error(`empty_project_slug:${rawProjectSlug ?? ''}`);
-  }
-  const channelSlug = meeting?.channel_slug || 'ohne-channel';
-  const datePrefix = String(meeting?.dateString ?? '').slice(0, 10) || 'undated';
-  const meetingSlug = meeting?.slug ?? '';
-  const destination = buildMeetingDestinationPaths({
-    meetingsRoot: path.join(workspaceRoot, 'memory', 'evidence', 'meetings'),
-    projectSlug,
-    channelSlug,
-    datePrefix,
-    meetingSlug,
-    workspaceRoot
-  });
-  const summaryToAbsolute = path.join(destination.folderPath, destination.summaryFileName);
-  const transcriptToAbsolute = path.join(destination.folderPath, destination.transcriptFileName);
-  const summaryFromAbsolute = meeting?.summary_path ? path.join(workspaceRoot, meeting.summary_path) : null;
-  const transcriptFromAbsolute = meeting?.transcript_path ? path.join(workspaceRoot, meeting.transcript_path) : null;
-  const summaryToRelative = relativeWorkspacePath(workspaceRoot, summaryToAbsolute);
-  const transcriptToRelative = relativeWorkspacePath(workspaceRoot, transcriptToAbsolute);
-  const previousProjectSlug = meeting?.project_slug ?? null;
-  const existingProjectSlugs = Array.isArray(meeting?.project_slugs) ? meeting.project_slugs : [];
-  const retainedProjectSlugs = previousProjectSlug && previousProjectSlug !== projectSlug
-    ? existingProjectSlugs.filter((slug) => slug !== previousProjectSlug)
-    : existingProjectSlugs;
-  const projectSlugs = [...new Set([...retainedProjectSlugs, projectSlug])];
-
-  return {
-    fromPaths: {
-      summary: summaryFromAbsolute,
-      transcript: transcriptFromAbsolute
-    },
-    toPaths: {
-      summary: summaryToAbsolute,
-      transcript: transcriptToAbsolute
-    },
-    frontmatterUpdates: {
-      project_slug: projectSlug,
-      summary_path: summaryToRelative,
-      transcript_path: transcriptToRelative
-    },
-    entryUpdates: {
-      project_slug: projectSlug,
-      project_slugs: projectSlugs,
-      project_scoped: true,
-      summary_path: summaryToRelative,
-      transcript_path: transcriptToRelative,
-      review_input: {
-        project_slug: projectSlug,
-        project_scoped: true
-      }
-    }
-  };
 }

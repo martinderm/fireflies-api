@@ -119,7 +119,7 @@ Die vorhandenen lokalen Summary-Dateien im Agent-Workspace zeigen zusätzlich di
 
 ## Empfohlene Markdown-Struktur für lokale Summary-Datei
 
-Die lokale Summary-Datei unter `memory/references/meetings/...summary.md` soll sich inhaltlich an dieser Feldlogik und an den beobachteten lokalen Dateien orientieren.
+Die vom kanonischen Writer publizierte Summary-Datei unter `memory/evidence/meetings/...summary.md` (Fallback `memory/references/meetings/...summary.md`) soll sich inhaltlich an dieser Feldlogik und an den beobachteten lokalen Dateien orientieren. Der Adapter liefert den Body als `summary_md`; Frontmatter und Pfad gehören dem Writer.
 
 ```md
 # <Meetingtitel>
@@ -208,8 +208,8 @@ Wenn nur ein Transcript vorhanden ist und keine Fireflies-Summary mitgeliefert w
 - bevorzugt die lokal beobachtete Abschnittsfolge verwenden: `Kurzüberblick` -> `Summary` -> `Executive Summary` -> `Key Points` -> `Decisions` -> `Action Items` -> `Open Questions` -> `Participants and Speakers` -> `Analytics Snapshot` -> `Related Systems` -> `Source Notes`
 - `Decisions` und `Open Questions` auch dann beibehalten, wenn aktuell nichts Belastbares vorliegt; dann schlicht `-` schreiben
 - `Action Items` nur als Aufgabenblock aus dem Transcript ableiten, nicht künstlich aufblasen
-- in `meetings.json` kenntlich machen, dass die Summary lokal erzeugt wurde
-- im `source`- oder Betriebskontext markieren, ob die Summary von Fireflies stammt oder lokal aus dem Transcript abgeleitet wurde
+- dem Writer im Record kenntlich machen, dass die Summary lokal erzeugt wurde (z. B. inertes `source_metadata`); das Register schreibt der Writer
+- im Record-/Betriebskontext markieren, ob die Summary von Fireflies stammt oder lokal aus dem Transcript abgeleitet wurde
 
 ## Transkript-Audit & Ergänzungen
 

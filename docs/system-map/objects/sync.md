@@ -4,37 +4,37 @@ cluster: orchestrator
 universe: live
 status: verified
 entity: scripts/sync-meetings-to-memory.mjs
-verified_at: 2026-10-03
-revision: 3b90b8f8ae06a0e6d99ea69d68fc4982db4edf31
+verified_at: 2026-10-21
+revision: c8c22cc+oi35-working-tree
 ---
 
 # Sync
 
-Lokaler Meeting-Sync in den aufrufenden Agent-Workspace mit knappen Kanälen, Fingerprinting und Review-Vormerkung.
+Read-only Intake-Orchestrierung: liest Register und API, baut Records und delegiert jeden Record an den kanonischen Writer.
 
 ## Why this shape
-Intake und fachliche Klassifikation sind getrennt: der Sync spiegelt und markiert, die Zuordnung entscheidet der aufrufende Agent im Chat.
+Intake, Transformation und Publikation sind getrennt. Der Adapter kennt Fireflies und Fingerprints, aber nicht die Writer-eigene Register-/Journal-/Pfadsemantik. Dadurch gibt es genau eine Schreibgrenze und keinen zweiten Meeting-Publisher.
 
 ## Shape
-`resolveMeetingsRoot` wählt `memory/evidence/meetings` (Dual Evidence, Fallback auf `memory/references/meetings` in Altsystemen) oder einen Settings-Pfad (`fireflies-api.meetingsRoot`); Ziel ist immer der Workspace außerhalb dieses Repos. Pro Meeting werden Summary- und Volltranskript-Markdown geschrieben (`YYYY-MM-DD-<slug>.summary.md` / `.transcript.md`; der Transcript-Body nutzt den gemeinsamen `renderTranscriptMarkdown`-Kern mit `bracketed: false`), `meetings.json` gepflegt (`channel_strategy` im knappen-Channel-Modell, `channel_mappings` pro Channel mit `routing_mode`) und ein `server_fingerprint` (SHA-256 über Metadaten, Summary und Sentences) statt eines erfundenen `updated_at` gespeichert; daraus leitet sich `server_change_status` (`new`, `unknown`, `changed`, `unchanged`) ab. Klassifikationsfelder bleiben bei Intake ungelöst (`classification_status: unmapped`, `review_recommended: true`) und `review_input` wird für den Chat-Review geschrieben; bereits gelöste Reviews (`llm_review_status: resolved`/`user-query`) bleiben stabil, außer der Server-Fingerprint ändert sich (dann zurück zu `pending`). Ein Cloud-Titel-Mutation-Suffix `(syncd)` existiert als Query, wird im Standardlauf aber nicht geschrieben (`cloud_title_error: skipped-no-write`). Modi: Standardlauf (nur neue), `--meeting-id <id> --mode all` (einzeln), `--refresh-changed --mode all` (bekannte erneut prüfen), optionaler Channel-Filter via `--context-channel-slug`/`--context-channel-title`. Seit #14 ist der komplette Intake-Loop (`runMeetingsIntake`) mit injizierbaren Graph-Calls und io-Adaptern exportiert — netzfrei regressionstestbar (`tests/sync-intake-smoke.mjs`); das CLI nutzt ihn mit `firefliesGraphQL` und echtem fs.
+`resolveMeetingsRoot` wählt weiterhin `memory/evidence/meetings` (Fallback `memory/references/meetings`) oder einen Settings-Pfad, aber **nur zum Lesen** des Registers. `parseSyncArgs` akzeptiert `--limit`, `--skip`, `--mode`, `--meeting-id`, `--refresh-changed`, `--dry-run`, `--context-channel-slug/title`, die Routingoptionen `--project`/`--topic`/`--event` plus Aliase `--project-slug`/`--topic-slug`/`--event-slug` sowie die Writer-Konfiguration `--meeting-writer`, `--python`, `--workspace-lock-root`, `--lease-id`, `--conversation-id`, `--timeout-ms`. Unbekannte Optionen und positionale Argumente sind Nutzungsfehler. `resolveRouting` normalisiert nur nichtleere Werte; ein **fehlendes** Routing ist gültig und bedeutet unmapped Intake. Explizit leere oder zu `ohne-channel` normalisierende Werte werfen `empty_<name>_slug:<raw>`.
 
-Project-Scoping (Issue #8): `--project-slug <slug>` (slugified, gemeinsamer `slugify`-Export) leitet die Zielordner für Meeting-Dateien (`buildMeetingDestinationPaths`) nach `memory/evidence/projects/<slug>/meetings/<channelSlug|ohne-channel>` ab — `meetings.json` bleibt am Meetings-Root, nur die Dateien gehen in den Projektbaum. Der Eintrag erhält `project_slug`, `project_slugs` (Dedup) und `project_scoped: true`; `review_input.project_slug` ist eine Nutzer-Vormerkung, keine Klassifikation (`classification_status` bleibt `unmapped`, `review_recommended` bleibt `true`); `channel_mappings` bleibt unangetastet. Härtung (#12): fehlende, leere, `--`-beginnende oder zu `ohne-channel` normalisierende Projekt-Slugs schlagen fail-loud ab (`empty_project_slug:<raw>` bzw. `missing value for --project-slug`, exit 2 — vor jedem Registry-Read und API-Call); der Projektbaum ist Dual-Evidence-fest unter `workspaceRoot` verdrahtet, nur der Pool folgt einem Custom-Root.
+`readRegistryFile` unterscheidet ein fehlendes Register (leerer Ausgangszustand) von einem beschädigten: ungültiges JSON, nacktes Array, ungültiger Root, nicht-Array-`meetings` und ungültige `channel_mappings` sind Rejections. Es wird nie `catch -> []` verwendet und nie etwas zurückgeschrieben. `computeMeetingFingerprint` bleibt der SHA-256 über Titel, Zeit, Dauer, Channels, Speakers, Summary, Sentences und Apps. Der alte Fingerprint wird aus `source_metadata.server_fingerprint` oder dem Legacy-Rootfeld gelesen; `server_change_status` (`new`/`unknown`/`changed`/`unchanged`) und `server_changed_since_last_sync` reisen inert in `source_metadata`.
 
-- [scripts/sync-meetings-to-memory.mjs](../../../scripts/sync-meetings-to-memory.mjs) — `scripts/sync-meetings-to-memory.mjs:10` (resolveMeetingsRoot), `scripts/sync-meetings-to-memory.mjs:218` (computeMeetingFingerprint), `scripts/sync-meetings-to-memory.mjs:269` (classifyMeeting), `scripts/sync-meetings-to-memory.mjs:386` (runMeetingsIntake — netzfrei testbarer Intake-Loop, graph/graphDetail injizierbar, Datei-Writes über io-Adapter mit echtem fs-Default), `scripts/sync-meetings-to-memory.mjs:463` (serverChangeStatus), `scripts/sync-meetings-to-memory.mjs:661` (runSyncCli-Einstieg), `scripts/sync-meetings-to-memory.mjs:744` (isDirectRun-Guard)
-- [scripts/relocate-local-meeting.mjs](../../../scripts/relocate-local-meeting.mjs) — `scripts/relocate-local-meeting.mjs:7` (resolveMeetingsRoot), `scripts/relocate-local-meeting.mjs:121` (relocateToProject — Reihenfolge: Pre-Check, beide Moves, dann Frontmatter-Write an Zielpfaden; Registry erst danach)
-- [scripts/_fireflies-meetings.mjs](../../../scripts/_fireflies-meetings.mjs) — `scripts/_fireflies-meetings.mjs:11` (slugify), `scripts/_fireflies-meetings.mjs:522` (buildMeetingDestinationPaths), `scripts/_fireflies-meetings.mjs:544` (buildProjectRelocatePlan)
+`runMeetingsIntake` sucht bestehende Einträge über Quellsystem plus externe Identität (Fireflies-Alias `fireflies_<id>` bleibt lesbar) **vor** dem Detail-Fetch. Mehrdeutige Identität, fremde Accountbindung und ein nichtleerer gebundener Account bei unbekanntem aktuellem Account stoppen den Kandidaten ohne API-/Writer-Aufruf; ein ungebundener Bestandseintrag bleibt unter der Quellsystem-Identität zulässig. Danach wird pro Meeting ein Record gebaut. Jeder Record geht an `writer.ingestRecord(record, {route, dryRun})`. Erfolge und Fehler bleiben pro Meeting sichtbar (`meetings`, `failures`, `synced`, `failed`); `state` ist `success`, `partial_error` oder `recovery_required`. `recovery_required`/`outcome_unknown` stoppt den Batch. `runSync` prüft zuerst Writer-Konfiguration und Capabilities, dann das Register, dann die API; Exit 0 nur bei vollem Erfolg, 2 bei Rejection/Teilfehler, 3 bei Recovery, 1 bei API-Fehlern.
 
-Relocate-Plan-Funktionen: `buildProjectRelocatePlan` leitet FROM-Pfade aus `meeting.summary_path`/`transcript_path` ab (funktioniert auch für Re-Relocate aus Projektbäumen) und entfernt bei Zielwechsel den bisherigen `project_slug` aus `project_slugs` (Membership = enthaltende Bäume, Orphan-Freiheit); `slugify` normalisiert Projekt-Slugs (Defense in Depth, Pfad-Escape unmöglich). Klassische `--to-slug`-Region bleibt byte-identisch zur Vor-Issue-#8-Revision. Tests: `tests/sync-project-smoke.mjs`.
+Es gibt keine Adapter-Writes: kein `mkdir`, kein Markdown, kein Frontmatter, kein `meetings.json`, kein Verschieben/Löschen. Der öffentliche CLI-/Funktionseinstieg bleibt, die Record-Ausführung liegt beim Writer.
+
+- [scripts/sync-meetings-to-memory.mjs](../../../scripts/sync-meetings-to-memory.mjs) - `scripts/sync-meetings-to-memory.mjs:43` (resolveMeetingsRoot), `scripts/sync-meetings-to-memory.mjs:68` (parseSyncArgs), `scripts/sync-meetings-to-memory.mjs:168` (resolveRouting), `scripts/sync-meetings-to-memory.mjs:177` (readRegistryFile), `scripts/sync-meetings-to-memory.mjs:214` (computeMeetingFingerprint), `scripts/sync-meetings-to-memory.mjs:333` (runMeetingsIntake), `scripts/sync-meetings-to-memory.mjs:544` (runSync), `scripts/sync-meetings-to-memory.mjs:618` (runSyncCli)
 
 ## Connected to
-[Meetings-Schema](meetings-schema.md), [Client](client.md), [Skill-Verhalten](skill-behavior.md). Prozesse: [meeting-sync](../processes/meeting-sync.md), [local-relocate](../processes/local-relocate.md).
+[Record](record.md), [Writer](writer.md), [Meetings-Schema](meetings-schema.md), [Client](client.md), [Skill-Verhalten](skill-behavior.md). Prozess: [meeting-sync](../processes/meeting-sync.md).
 
 ## If you change this
-- **Hits:** `meetings.json`-Verbraucher (meeting-desk, Agent-Workspaces), Fingerprint-Semantik, Klassifikationsfelder, SKILL.md-Sync-Regeln.
-- **Does not hit:** Reine Lese-Skripte (get/list/channels/probe); Auth-Resolvierung.
+- **Hits:** `meetings.json`-Leser, Fingerprint-/Alias-Semantik, Routingoptionen, Writer-Transport, SKILL.md-Sync-Regeln, Sync-Tests.
+- **Does not hit:** Reine Lese-Skripte (list/channels/probe), Writer-interne Journal-/Recovery-Logik.
 
 ## Surfaces
-Schreibseite ist der aufrufende Workspace (`memory/evidence|references/meetings/` und mit `--project-slug`/`--to-project` zusätzlich `memory/evidence/projects/<slug>/meetings/`); gelesen werden Fireflies-API und lokale `meetings.json`.
+Liest Fireflies-API und lokale `meetings.json`; schreibt selbst nichts. Schreibseite ist ausschließlich der externe Writer.
 
 ## See
-Datenmodell und Frontmatter: [references/data-model.md](../../../references/data-model.md). Sync-Regeln: [SKILL.md](../../../SKILL.md) Abschnitt „Lokaler Sync und Update-Erkennung“. [Änderungsrouting](../effects/CONTEXT.md).
+[Record-Vertrag](../../../references/meeting-record-v1.md), [Datenmodell](../../../references/data-model.md). [Änderungsrouting](../effects/CONTEXT.md).
