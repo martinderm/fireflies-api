@@ -6,6 +6,6 @@
 - [record](record.md) - live / verified, 2026-10-21
 - [writer](writer.md) - live / verified, 2026-10-21
 - [cli](cli.md) - live / verified, 2026-10-21
-- [sync](sync.md) - live / verified, 2026-10-21
+- [sync](sync.md) - live / verified, 2026-10-29
 - [migration](migration.md) - live / verified, 2026-10-29
-- [quality](quality.md) - live / verified, 2026-10-29 (205 Tests; 6 umgebungsabhängig)
+- [quality](quality.md) - live / verified, 2026-10-29 (209 Tests; 6 umgebungsabhängig)

@@ -5,7 +5,7 @@ universe: live
 status: verified
 entity: scripts/sync-meetings-to-memory.mjs
 verified_at: 2026-10-29
-revision: fa31dbd+ff16-working-tree
+revision: f7a7481+pr20-integration
 ---
 
 # Sync
@@ -24,13 +24,15 @@ Intake, Transformation und Publikation sind getrennt. Der Adapter kennt Fireflie
 
 Dieser Sync hat keine Adapter-Writes: kein `mkdir`, kein Markdown, kein Frontmatter, kein `meetings.json`, kein Verschieben/Löschen. Der öffentliche CLI-/Funktionseinstieg bleibt, die Record-Ausführung liegt beim Writer. Die einzige Register-Schreibstelle des Repositorys ist die separate, operator-invokierte [Migration](migration.md), die der Sync nie aufruft.
 
-- [scripts/sync-meetings-to-memory.mjs](../../../scripts/sync-meetings-to-memory.mjs) - `scripts/sync-meetings-to-memory.mjs:43` (resolveMeetingsRoot), `scripts/sync-meetings-to-memory.mjs:68` (parseSyncArgs), `scripts/sync-meetings-to-memory.mjs:168` (resolveRouting), `scripts/sync-meetings-to-memory.mjs:177` (readRegistryFile), `scripts/sync-meetings-to-memory.mjs:217` (computeMeetingFingerprint), `scripts/sync-meetings-to-memory.mjs:336` (runMeetingsIntake), `scripts/sync-meetings-to-memory.mjs:547` (runSync), `scripts/sync-meetings-to-memory.mjs:621` (runSyncCli)
+Der CLI-Direktlauf-Guard `isDirectRun` vergleicht `process.argv[1]` und `fileURLToPath(import.meta.url)` **nach** `fs.realpathSync` auf beiden Seiten. Ein Junction-/Symlink-Aufruf des Skripts läuft damit identisch zum normalen Pfad; ein reiner Modul-Import startet die CLI nie. Fehlende oder unlesbare Pfade liefern `false` (try/catch), statt aus dem Guard zu werfen.
+
+- [scripts/sync-meetings-to-memory.mjs](../../../scripts/sync-meetings-to-memory.mjs) - `scripts/sync-meetings-to-memory.mjs:43` (resolveMeetingsRoot), `scripts/sync-meetings-to-memory.mjs:68` (parseSyncArgs), `scripts/sync-meetings-to-memory.mjs:168` (resolveRouting), `scripts/sync-meetings-to-memory.mjs:177` (readRegistryFile), `scripts/sync-meetings-to-memory.mjs:217` (computeMeetingFingerprint), `scripts/sync-meetings-to-memory.mjs:336` (runMeetingsIntake), `scripts/sync-meetings-to-memory.mjs:547` (runSync), `scripts/sync-meetings-to-memory.mjs:621` (runSyncCli), `scripts/sync-meetings-to-memory.mjs:639` (isDirectRun)
 
 ## Connected to
 [Record](record.md), [Writer](writer.md), [Meetings-Schema](meetings-schema.md), [Client](client.md), [Skill-Verhalten](skill-behavior.md), [Migration](migration.md). Prozess: [meeting-sync](../processes/meeting-sync.md).
 
 ## If you change this
-- **Hits:** `meetings.json`-Leser, Legacy-Array-Rejection-Text, Fingerprint-/Alias-Semantik, Routingoptionen, Writer-Transport, SKILL.md-Sync-Regeln, Sync-Tests.
+- **Hits:** `meetings.json`-Leser, Legacy-Array-Rejection-Text, Fingerprint-/Alias-Semantik, Routingoptionen, Writer-Transport, CLI-Direktlauf-Guard (Junction/Symlink), SKILL.md-Sync-Regeln, Sync-Tests.
 - **Does not hit:** Reine Lese-Skripte (list/channels/probe), Writer-interne Journal-/Recovery-Logik, die separate [Migration](migration.md).
 
 ## Surfaces
