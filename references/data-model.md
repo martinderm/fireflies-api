@@ -122,6 +122,34 @@ Regeln:
 - Summary und Volltranskript werden getrennt publiziert; Raw-Evidenz wird niemals umgeschrieben.
 - Ein Adapter darf das Register lesen, aber niemals schreiben, reparieren, löschen oder neu anlegen.
 
+#### Begrenzte Ausnahme: einmalige Legacy-Array-Migration
+
+Historisch war `meetings.json` ein nacktes Array. Für genau diesen Zustand gibt es
+eine einzige, explizite Operator-Ausnahme: `scripts/migrate-meetings-registry.mjs`.
+
+- Der Sync bleibt read-only und bricht bei einem Array-Root fail-closed ab
+  (`registry_legacy_array_unsupported`); er ruft die Migration nicht auf und
+  schreibt das Register nie. Die Migration ist **kein Sync-Fallback**.
+- Die Migration führt genau eine Transition aus: Legacy-Array-Root -> kanonischer
+  Objekt-Root. Sie erhält jeden Eintrag, jede Reihenfolge und jedes unbekannte
+  Feld; sie ergänzt ausschließlich `meeting_id`, wenn sie fehlt (aus
+  `source.external_id`, sonst aus dem Legacy-`id`).
+- Sie validiert opake Identitäten (nicht leer, max. 512 Zeichen, keine
+  Steuerzeichen, keine unpaaren Surrogate), Quellformen und Duplikate inklusive
+  des `fireflies_<id>`-Alias **vor** jeder Mutation. Widersprüche, Duplikate,
+  fehlende Identitäten und malformed JSON/Mengen enden mit Exit 2 und lassen die
+  Originalbytes unverändert.
+- Ergebnis ist der kanonische Root mit `channel_strategy`-Defaults,
+  `channel_mappings: {}` und den unveränderten Einträgen unter `meetings`. Ein
+  explizites leeres Array migriert zu einem leeren kanonischen Register.
+- Ein bereits kanonisches Register ist ein bytegleicher No-op; wiederholte Läufe
+  melden `already_current` und schreiben nichts. Geschrieben wird atomar
+  (Temp-Datei im Zielverzeichnis, `fsync`, `rename`) in UTF-8 mit 2 Spaces, LF
+  und Trailing Newline; bei Fehlern bleibt das Original unverändert und die
+  Temp-Datei wird entfernt. Meeting-Dateien, Pfade und Inhalte bleiben unberührt.
+- Laufende Register-Writes bleiben Eigentum des externen meeting-desk-Writers;
+  diese Utility ist kein zweiter Publisher.
+
 ### `meetings.json` — kanonischer Eintrag (OI #35)
 
 Neue Einträge verwenden die folgende Objektform. Nicht vorhandene Werte sind `null`, nicht erfunden. Provider-spezifische Extras gehören ausschließlich nach `source_metadata`.

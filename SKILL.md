@@ -5,7 +5,7 @@ description: Arbeite mit der Fireflies API für Meeting-Transkripte, Summaries, 
 
 # Fireflies API (SaaS-Adapter)
 
-> **Architektur-Rolle:** Technischer SaaS-Adapter für Fireflies.ai (GraphQL, Audio-Upload, Transkript-Abruf, Webhooks). Der Adapter transformiert API-Payloads in `meeting-record/1` und schreibt **keine** Meeting-Dateien und **kein** `meetings.json`.
+> **Architektur-Rolle:** Technischer SaaS-Adapter für Fireflies.ai (GraphQL, Audio-Upload, Transkript-Abruf, Webhooks). Der Adapter transformiert API-Payloads in `meeting-record/1` und schreibt **keine** Meeting-Dateien und **kein** `meetings.json`. Einzige Ausnahme ist die einmalige, explizit operator-invokierte Legacy-Array-Migration (`scripts/migrate-meetings-registry.mjs`), die der Sync nie aufruft.
 >
 > **Workflow-Orchestrierung und kanonischer Writer:** Die übergeordnete thematische Klassifikation, Evidenz-Ablage, Action-Item-Triage und alle Ingest-Dateimutationen liegen bei **[`office-intelligence/meeting-desk`](../office-intelligence/skills/meeting-desk/SKILL.md)**. Der Sync delegiert jeden Record an `ingest_meeting.py` dieses Skills.
 
@@ -44,6 +44,8 @@ Der Adapter ist **Transformator**, nicht Publisher:
 - `sync-meetings-to-memory.mjs` liest `meetings.json` nur lesend (für Modus, Alias-Identität, Account-Bindung und Fingerprint-Vergleich) und ruft für jeden Record den kanonischen Python-Writer auf.
 - Es gibt **keinen** Register-Upsert, keinen Markdown-Write, kein Verschieben, Löschen oder Aktualisieren von Meeting-Dateien im Adapter. `relocate-local-meeting.mjs` wurde entfernt; Umrouting ist ein Writer-/Operator-Vorgang.
 - Ein Fehler des Writers ist ein Fehler. Es gibt **keinen stillen Fallback** auf einen Legacy-Writer.
+
+Legacy-Register (nacktes JSON-Array in `meetings.json`): Der Sync bleibt read-only und bricht fail-closed mit `registry_legacy_array_unsupported` ab; die Fehlermeldung nennt `node scripts/migrate-meetings-registry.mjs`. Die Migration ist **kein Sync-Fallback**, sondern ein einmaliger, expliziter Operator-Vorgang. Sie ist die einzige Register-Schreibstelle dieses Adapters, führt genau die Transition Legacy-Array -> kanonischer Objekt-Root aus, erhält alle Einträge und unbekannten Felder und validiert vor jeder Mutation. Meeting-Dateien, Pfade, Inhalte und die Fireflies-API bleiben unberührt; laufende Register-Writes gehören weiterhin dem externen meeting-desk-Writer.
 
 Vertrauenswürdige Aufrufkonfiguration (niemals aus dem Record oder Provider-Payload):
 
@@ -247,6 +249,11 @@ Aktuelle Skripte:
   - `--project`/`--topic`/`--event` (Aliase `--project-slug`/`--topic-slug`/`--event-slug`) sind vertrauenswürdige Routing-Optionen für den Writer; ohne Routing ist der Lauf ein gültiger unmapped Intake
   - explizit leere oder zu `ohne-channel` normalisierende Routingwerte werden fail-loud als `empty_project_slug` o. Ä. abgewiesen; ein **fehlendes** `--project-slug` ist kein Fehler
   - Writer-Konfiguration: `--meeting-writer`, `--python`, `--workspace-lock-root`, `--lease-id`, optional `--conversation-id`; Env-Fallback nur `MEETING_DESK_WRITER`/`MEETING_DESK_PYTHON`
+- `migrate-meetings-registry.mjs`
+  - einmalige, explizite Operator-Migration eines Legacy-Array-Registers (`meetings.json`) in den kanonischen Objekt-Root; **kein Sync-Fallback** und nicht vom Sync aufgerufen
+  - erhält alle Einträge und unbekannten Felder, ergänzt `meeting_id` nur wenn sie fehlt, validiert Identitäten/Quellen/Duplikate vor jeder Mutation und schreibt kanonisches JSON atomar (2 Spaces, LF, Trailing Newline)
+  - Aufruf: `node scripts/migrate-meetings-registry.mjs [--meetings-root <path>] [--dry-run] [--json]`; Exit 0 bei `migrated`/`already_current`/`dry_run`, Exit 2 bei jeder Ablehnung
+  - berührt keine Meeting-Dateien, liest keine Secrets und ruft die Fireflies-API nicht auf; bei bereits kanonischem Register bytegleicher No-op
 - `probe-meeting-capabilities.mjs`
   - prüft für ein konkretes Meeting read-only, welche Felder/Artefakte im aktuellen Account/Plan tatsächlich befüllt oder gesperrt sind
   - Standard-Query fordert planabhängige Paid-Felder (`audio_url`, `video_url`, `analytics`) bewusst nicht an; `--include-paid-fields` fordert sie gezielt nach (auf einem Free-Plan bricht Fireflies die gesamte Query mit `paid_required` ab)
