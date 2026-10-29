@@ -11,10 +11,11 @@ ICM Form 6; Karte des Repository-Istzustands. Einstieg für Änderungen, keine z
 | Kanonischer Writer-Aufruf, Capabilities, Envelope/Exit | [Writer](objects/writer.md) |
 | CLI-Skripte und ihre Argumente | [CLI](objects/cli.md) |
 | Read-only Sync, Register-Aliase und Routing | [Sync](objects/sync.md) |
+| Legacy-Array-Register einmalig migrieren | [Migration](objects/migration.md) |
 | Tatsächliche API-Flüsse | [Prozesse](processes/CONTEXT.md) |
 | Tests | [Qualität](objects/quality.md) |
 | Was trifft eine Änderung? | [Auswirkungen](effects/CONTEXT.md) |
 
-Namensfallen: „Meeting“ und „Transcript“ bezeichnen dasselbe GraphQL-Objekt (`transcript`); Meeting-IDs sind Transcript-IDs. Der Adapter transformiert API-Payloads in `meeting-record/1` und schreibt **weder** Meeting-Dateien **noch** `meetings.json`; Register, Frontmatter, Pfade und Review-/Content-Zustand gehören dem meeting-desk-Writer. `get-meeting.mjs` schreibt Dateien nur als `.meeting-export.json` unter `<workspace>/data/`.
+Namensfallen: „Meeting“ und „Transcript“ bezeichnen dasselbe GraphQL-Objekt (`transcript`); Meeting-IDs sind Transcript-IDs. Der Adapter transformiert API-Payloads in `meeting-record/1` und schreibt **weder** Meeting-Dateien **noch** `meetings.json`; Register, Frontmatter, Pfade und Review-/Content-Zustand gehören dem meeting-desk-Writer. Einzige Ausnahme ist die explizite, einmalige [Legacy-Array-Migration](objects/migration.md); der Sync bleibt read-only. `get-meeting.mjs` schreibt Dateien nur als `.meeting-export.json` unter `<workspace>/data/`.
 
 Lade [CONTEXT.md](CONTEXT.md) und nur die zum Auftrag passende Karte. Neue Aufgaben: [GitHub Issues](https://github.com/martinderm/fireflies-api/issues). Metadatenregeln: [_meta/schema.md](_meta/schema.md).

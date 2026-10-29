@@ -193,7 +193,10 @@ export function readRegistryFile(filePath) {
   }
 
   if (Array.isArray(document)) {
-    throw usageError('registry_legacy_array_unsupported');
+    throw usageError(
+      'registry_legacy_array_unsupported: this register is a legacy array; '
+      + 'run once `node scripts/migrate-meetings-registry.mjs` to migrate it (sync never writes the register)'
+    );
   }
   if (document === null || typeof document !== 'object') {
     throw usageError('registry_invalid_root');
