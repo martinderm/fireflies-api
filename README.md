@@ -4,7 +4,8 @@ Kompakter Skill für Fireflies GraphQL-Workflows (Meetings, Channels, Transcript
 Der Skill ist ein **Record-Adapter**: er transformiert Fireflies-Payloads in
 `meeting-record/1` und delegiert jede Meeting-Ablage an den kanonischen
 `meeting-desk`-Writer. Er schreibt selbst weder Meeting-Dateien noch
-`meetings.json`.
+`meetings.json`; die einzige, ausdrücklich operator-invokierte Ausnahme ist die
+einmalige Legacy-Register-Migration (siehe unten).
 
 ## Inhalt
 
@@ -71,6 +72,26 @@ node scripts/sync-meetings-to-memory.mjs \
   --lease-id <lease> \
   [--project <slug>] [--topic <slug>] [--event <slug>] [--dry-run]
 ```
+
+Legacy-Register einmalig migrieren (nur wenn `meetings.json` noch ein nacktes
+JSON-Array ist):
+
+```bash
+node scripts/migrate-meetings-registry.mjs [--meetings-root <path>] [--dry-run] [--json]
+```
+
+- Einmaliger Operator-Vorgang, **kein Sync-Fallback**: der Sync bleibt read-only,
+  schreibt `meetings.json` nie und bricht bei einem Legacy-Array fail-closed ab;
+  seine Fehlermeldung nennt dieses Migrationskommando.
+- Die Migration führt genau eine begrenzte Transition aus (Legacy-Array-Root ->
+  kanonischer Objekt-Root), erhält alle Einträge und unbekannten Felder, ergänzt
+  `meeting_id` nur wenn sie fehlt und validiert vor jeder Mutation.
+- Sie schreibt ausschließlich `meetings.json` (keine Meeting-Dateien, keine
+  Fireflies-API, keine Secrets), atomar als kanonisches JSON (2 Spaces, LF,
+  Trailing Newline); ein bereits kanonisches Register bleibt bytegleich und
+  unverändert.
+- Exit 0 bei `migrated`/`already_current`/`dry_run`, Exit 2 bei jeder Ablehnung.
+  `--meetings-root` löst relative Pfade gegen den Workspace-Root auf.
 
 ## Lizenz
 

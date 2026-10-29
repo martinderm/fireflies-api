@@ -151,6 +151,7 @@ test('sync cli: a missing project route reaches writer configuration instead of 
 test('sync cli: a corrupt registry is rejected after capabilities but before any list API call', (t) => {
   const workspace = createWorkspace(t);
   fs.writeFileSync(workspace.registryPath, '[]', 'utf8');
+  const beforeBytes = fs.readFileSync(workspace.registryPath, 'utf8');
   const writer = writeFakeWriter(workspace.workspaceRoot);
   const result = runSyncCli(workspace.workspaceRoot, [
     '--limit', '1',
@@ -162,7 +163,10 @@ test('sync cli: a corrupt registry is rejected after capabilities but before any
 
   assert.equal(result.status, 2, result.stderr);
   assert.match(result.stderr, /registry_legacy_array_unsupported/);
+  assert.match(result.stderr, /scripts[\\/]migrate-meetings-registry\.mjs/);
   assert.doesNotMatch(result.stderr, /missing_secrets_file/);
+  assert.equal(fs.readFileSync(workspace.registryPath, 'utf8'), beforeBytes, 'sync never writes the legacy register');
+  assert.deepEqual(fs.readdirSync(workspace.meetingsRoot), ['meetings.json'], 'sync creates no register or temporary file');
 });
 
 test('sync cli: capabilities fail closed before the registry or any live API is touched', (t) => {
