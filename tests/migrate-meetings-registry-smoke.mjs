@@ -117,6 +117,29 @@ function fsWithFailingRename(message = 'injected rename failure') {
   });
 }
 
+// Bumps the real registry mtime on the first production statSync, i.e. after the
+// read and before the concurrent-change guard, so the real guard is exercised
+// instead of a faked stat result.
+function fsWithConcurrentMtimeChange(registryPath) {
+  let bumped = false;
+  return new Proxy(fs, {
+    get(target, property) {
+      if (property === 'statSync' && !bumped) {
+        return (...args) => {
+          if (!bumped) {
+            bumped = true;
+            const future = new Date(Date.now() + 5000);
+            fs.utimesSync(registryPath, future, future);
+          }
+          return target.statSync(...args);
+        };
+      }
+      const value = Reflect.get(target, property);
+      return typeof value === 'function' ? value.bind(target) : value;
+    }
+  });
+}
+
 function runMigrationCli(cwd, args) {
   return spawnSync(process.execPath, [MIGRATE_SCRIPT, ...args], {
     cwd,
@@ -379,6 +402,21 @@ for (const rejection of rejectionCases) {
   });
 }
 
+test('file: an mtime change between read and replace fails the concurrent-change guard', (t) => {
+  const workspace = createWorkspace(t);
+  const originalBytes = JSON.stringify(legacyEntries());
+  writeRaw(workspace.registryPath, originalBytes);
+
+  assert.throws(
+    () => migrateMeetingsRegistryFile(workspace.registryPath, {
+      fs: fsWithConcurrentMtimeChange(workspace.registryPath)
+    }),
+    /registry_concurrent_change/
+  );
+  assert.equal(readRaw(workspace.registryPath), originalBytes, 'the original bytes must stay untouched');
+  assert.deepEqual(listDir(workspace.meetingsRoot), [MEETINGS_JSON], 'no temporary file may remain');
+});
+
 test('write: writeJsonAtomic serializes canonical bytes and leaves no temporary file', (t) => {
   const workspace = createWorkspace(t);
   const target = path.join(workspace.meetingsRoot, 'atomic.json');
@@ -456,6 +494,47 @@ test('cli: a rejection exits 2 with a stderr envelope and leaves the register un
   assert.match(result.stderr, /registry_invalid_json/);
   assert.equal(readRaw(workspace.registryPath), originalBytes);
   assert.deepEqual(listDir(workspace.meetingsRoot), [MEETINGS_JSON]);
+});
+
+test('cli: --dry-run reports dry_run for a legacy array and writes nothing', (t) => {
+  const workspace = createWorkspace(t);
+  const originalBytes = JSON.stringify(legacyEntries());
+  writeRaw(workspace.registryPath, originalBytes);
+
+  const result = runMigrationCli(workspace.workspaceRoot, [
+    '--meetings-root', 'memory/evidence/meetings',
+    '--dry-run',
+    '--json'
+  ]);
+
+  assert.equal(result.status, 0, result.stderr);
+  const envelope = JSON.parse(result.stdout);
+  assert.equal(envelope.ok, true);
+  assert.equal(envelope.state, 'dry_run');
+  assert.equal(envelope.dry_run, true);
+  assert.equal(envelopeMeetingCount(envelope), 4);
+  assert.equal(readRaw(workspace.registryPath), originalBytes, 'dry run must not touch the register');
+  assert.deepEqual(listDir(workspace.meetingsRoot), [MEETINGS_JSON], 'no temporary file may remain');
+});
+
+test('cli: a valid canonical root without a meetings key is an already_current no-op', (t) => {
+  const workspace = createWorkspace(t);
+  const originalBytes = '{}\n';
+  writeRaw(workspace.registryPath, originalBytes);
+
+  const result = runMigrationCli(workspace.workspaceRoot, [
+    '--meetings-root', 'memory/evidence/meetings',
+    '--json'
+  ]);
+
+  assert.equal(result.status, 0, result.stderr);
+  const envelope = JSON.parse(result.stdout);
+  assert.equal(envelope.ok, true);
+  assert.equal(envelope.state, 'already_current');
+  assert.equal(envelopeMeetingCount(envelope), 0);
+  assert.equal(envelope.dry_run, false);
+  assert.equal(readRaw(workspace.registryPath), originalBytes, 'the register must stay byte-identical');
+  assert.deepEqual(listDir(workspace.meetingsRoot), [MEETINGS_JSON], 'no temporary file may remain');
 });
 
 test('cli: direct execution through a junction path runs the same migration', (t) => {

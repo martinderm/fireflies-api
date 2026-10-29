@@ -378,10 +378,11 @@ function runMigrationCli() {
     const args = parseMigrationArgs(process.argv.slice(2));
     const { workspaceRoot, registryPath } = resolveRegistryPath(args);
     const result = migrateMeetingsRegistryFile(registryPath, { dryRun: args.dryRun });
+    const meetings = Array.isArray(result.document?.meetings) ? result.document.meetings.length : 0;
     const envelope = {
       ok: true,
       state: result.state,
-      meetings: result.document.meetings.length,
+      meetings,
       path: relativeWorkspacePath(workspaceRoot, registryPath),
       dry_run: result.state === 'dry_run'
     };

@@ -26,7 +26,8 @@ meeting-desk-Writer.
 `migrateLegacyRegistryDocument` nimmt einen geparsten Root: ein Array migriert
 (`migrated`) verlustfrei und in Originalreihenfolge zum kanonischen Objekt
 `channel_strategy`-Defaults + `channel_mappings: {}` + `meetings`; ein valides
-Objekt ist `already_current` und wird nur tief kopiert. Identität ist
+Objekt ist `already_current` und wird nur tief kopiert, wobei ein Root ohne
+`meetings`-Key gültig bleibt und die CLI dann `meetings: 0` meldet. Identität ist
 `meeting_id`, sonst `source.external_id`, sonst Legacy-`id`; `meeting_id` wird nur
 ergänzt, wenn sie fehlt. Der dokumentierte Alias `fireflies_<id>` gilt als
 gleichwertig, ein Widerspruch ist `legacy_entry_identity_conflict:<index>`.
@@ -52,7 +53,7 @@ während der Import seitenwirkungsfrei bleibt. Exit 0 für
 `--meetings-root` löst relative Pfade gegen den Workspace-Root auf. Keine Secrets,
 keine Fireflies-API, keine Meeting-Dateien.
 
-- [scripts/migrate-meetings-registry.mjs](../../../scripts/migrate-meetings-registry.mjs) - `scripts/migrate-meetings-registry.mjs:159` (migrateLegacyRegistryDocument), `scripts/migrate-meetings-registry.mjs:204` (migrateMeetingsRegistryFile), `scripts/migrate-meetings-registry.mjs:251` (writeJsonAtomic), `scripts/migrate-meetings-registry.mjs:307` (isDirectRun), `scripts/migrate-meetings-registry.mjs:350` (runMigrationCli)
+- [scripts/migrate-meetings-registry.mjs](../../../scripts/migrate-meetings-registry.mjs) - `scripts/migrate-meetings-registry.mjs:181` (migrateLegacyRegistryDocument), `scripts/migrate-meetings-registry.mjs:230` (migrateMeetingsRegistryFile), `scripts/migrate-meetings-registry.mjs:277` (writeJsonAtomic), `scripts/migrate-meetings-registry.mjs:333` (isDirectRun), `scripts/migrate-meetings-registry.mjs:376` (runMigrationCli)
 
 ## Connected to
 [Sync](sync.md), [Skill-Verhalten](skill-behavior.md). Prozess: [meeting-sync](../processes/meeting-sync.md). Datenmodell: [Datenmodell](../../../references/data-model.md).
