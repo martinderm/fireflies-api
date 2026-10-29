@@ -625,8 +625,23 @@ async function runSyncCli() {
   process.exitCode = result.exitCode;
 }
 
-const isDirectRun = Boolean(process.argv[1]) && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+function safeRealPath(candidate) {
+  try {
+    return fs.realpathSync(candidate);
+  } catch {
+    return null;
+  }
+}
 
-if (isDirectRun) {
+export function isDirectRun(argv = process.argv, moduleUrl = import.meta.url) {
+  const entry = argv?.[1];
+  if (typeof entry !== 'string' || entry === '') return false;
+  const entryRealPath = safeRealPath(path.resolve(entry));
+  if (!entryRealPath) return false;
+  const moduleRealPath = safeRealPath(fileURLToPath(moduleUrl));
+  return moduleRealPath !== null && entryRealPath === moduleRealPath;
+}
+
+if (isDirectRun()) {
   runSyncCli();
 }
